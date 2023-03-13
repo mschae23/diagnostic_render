@@ -5,6 +5,8 @@ use crate::render::color::ColorConfig;
 
 pub mod color;
 
+mod data;
+
 /// Represents a location in a specific source file,
 /// using line and column indices.
 ///
@@ -70,7 +72,14 @@ impl<'w, W, C, F: Files> DiagnosticRenderer<'w, W, C, F> {
 }
 
 impl<'w, W: WriteColor, C: ColorConfig, F: Files> DiagnosticRenderer<'w, W, C, F> {
+    /// Renders all diagnostics.
+    ///
+    /// The renderer will no longer contain any diagnostics after this call.
     pub fn render(&mut self) {
+        if self.diagnostics.is_empty() {
+            return;
+        }
+
         todo!()
     }
 }

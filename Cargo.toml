@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-termcolor = { version = "1.2.0", optional = true }
+termcolor = { version = "1.2.0" }
 
 [features]
-color = []
+# No need for a "color" feature, as the library user is responsible for adding colors

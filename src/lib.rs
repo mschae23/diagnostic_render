@@ -1,14 +1,17 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+//! This crate provides an [ASCII renderer] for printing formatted [diagnostics]
+//! like error messages and warnings on some source code.
+//!
+//! These diagnostics contain annotations that are shown directly on the lines
+//! in the source they refer to, as well as notes shown after the source.
+//!
+//! # Example
+//! ```
+//! // TODO give an example here
+//! ```
+//!
+//! [ASCII renderer]: render::DiagnosticRenderer
+//! [diagnostics]: diagnostic::Diagnostic
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod file;
+pub mod diagnostic;
+pub mod render;

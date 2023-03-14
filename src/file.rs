@@ -1,5 +1,4 @@
 // from codespan, with slight modifications
-// Licensed under Apache License, Version 2.0
 
 //! Source file support for diagnostic reporting.
 //!
@@ -186,7 +185,7 @@ pub struct Location {
 /// # Example
 ///
 /// ```rust
-/// use source_diagnostic_render::file;
+/// use diagnostic_render::file;
 ///
 /// let source = "\n\n🗻∈🌏\n\n";
 ///
@@ -220,7 +219,7 @@ pub fn column_index(source: &str, line_range: Range<usize>, byte_index: usize) -
 /// # Example
 ///
 /// ```rust
-/// use source_diagnostic_render::file;
+/// use diagnostic_render::file;
 ///
 /// let source = "foo\nbar\r\n\nbaz";
 /// let line_starts: Vec<_> = file::line_starts(source).collect();

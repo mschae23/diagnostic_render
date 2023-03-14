@@ -11,7 +11,7 @@ use std::ops::Range;
 /// These are ordered in the following way:
 ///
 /// ```rust
-/// use source_diagnostic_render::diagnostic::Severity;
+/// use diagnostic_render::diagnostic::Severity;
 ///
 /// assert!(Severity::Bug > Severity::Error);
 /// assert!(Severity::Error > Severity::Warning);
@@ -36,7 +36,7 @@ pub enum Severity {
 ///
 /// These are ordered in the following way:
 /// ```rust
-/// use source_diagnostic_render::diagnostic::AnnotationStyle;
+/// use diagnostic_render::diagnostic::AnnotationStyle;
 ///
 /// assert!(AnnotationStyle::Primary < AnnotationStyle::Secondary);
 /// ```

@@ -41,12 +41,12 @@ impl From<(usize, usize)> for LineColumn {
 
 /// An ASCII renderer for diagnostics.
 #[derive(Debug)]
-pub struct DiagnosticRenderer<'w, W, C, F: Files> {
+pub struct DiagnosticRenderer<'a, 'w, W, C, F: Files<'a>> {
     f: &'w mut W, colors: C,
     diagnostics: Vec<Diagnostic<F::FileId>>,
 }
 
-impl<'w, W, C, F: Files> DiagnosticRenderer<'w, W, C, F> {
+impl<'a, 'w, W, C, F: Files<'a>> DiagnosticRenderer<'a, 'w, W, C, F> {
     /// Creates a new diagnostics renderer.
     pub fn new_with_diagnostics(f: &'w mut W, colors: C, diagnostics: Vec<Diagnostic<F::FileId>>) -> Self {
         DiagnosticRenderer {
@@ -71,7 +71,7 @@ impl<'w, W, C, F: Files> DiagnosticRenderer<'w, W, C, F> {
     }
 }
 
-impl<'w, W: WriteColor, C: ColorConfig, F: Files> DiagnosticRenderer<'w, W, C, F> {
+impl<'a, 'w, W: WriteColor, C: ColorConfig, F: Files<'a>> DiagnosticRenderer<'a, 'w, W, C, F> {
     /// Renders all diagnostics.
     ///
     /// The renderer will no longer contain any diagnostics after this call.

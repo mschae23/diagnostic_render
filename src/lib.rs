@@ -5,7 +5,7 @@
 //! in the source they refer to, as well as notes shown after the source.
 //!
 //! # Example
-//! ```
+//! ```text
 //! // TODO give an example here
 //! ```
 //!

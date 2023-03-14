@@ -76,12 +76,12 @@ impl std::error::Error for Error {
 
 /// A minimal interface for accessing source files when rendering diagnostics.
 ///
-/// A lifetime parameter `'a` is provided to allow any of the returned values to returned by reference.
+/// A lifetime parameter `'a` is provided to allow any of the returned values to be returned by reference.
 /// This is to workaround the lack of higher kinded lifetime parameters.
 /// This can be ignored if this is not needed, however.
 pub trait Files<'a> {
     /// A unique identifier for files in the file provider.
-    type FileId: 'a + Copy + PartialEq;
+    type FileId: 'a + Copy + Eq + Ord;
     /// The user-facing name of a file, to be displayed in diagnostics.
     type Name: 'a + std::fmt::Display;
     /// The source code of a file.

@@ -4,6 +4,7 @@
 //! for their specific use cases, and convert them to this crate's
 //! representation when needed.
 
+use std::fmt::{Display, Formatter};
 use std::ops::Range;
 
 /// A severity level for diagnostic messages.
@@ -30,6 +31,18 @@ pub enum Severity {
     Error,
     /// An unexpected bug
     Bug,
+}
+
+impl Display for Severity {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Severity::Bug => "bug",
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+            Severity::Note => "note",
+            Severity::Help => "help",
+        })
+    }
 }
 
 /// A style for annotations.
@@ -159,11 +172,20 @@ pub struct Diagnostic<FileId> {
     /// sense on its own, without additional context provided by annotations and notes.
     pub message: String,
     /// Source annotations that describe the cause of the diagnostic.
+    ///
     /// The order of the annotations inside the vector does not have any meaning.
     /// The annotations are always arranged in the order they appear in the source code.
     pub annotations: Vec<Annotation<FileId>>,
     /// Notes that are associated with the primary cause of the diagnostic.
     pub notes: Vec<Note>,
+
+    // /// Additional diagnostics that can be used to show context from other files,
+    // /// provide help by showing changed code, or similar. They are shown below notes.
+    // pub sub_diagnostics: Vec<Diagnostic<FileId>>,
+
+    /// The number of diagnostics following this one that are hidden due to
+    /// something like panic mode in error reporting.
+    pub suppressed_count: u32,
 }
 
 impl<FileId> Diagnostic<FileId> {
@@ -175,6 +197,7 @@ impl<FileId> Diagnostic<FileId> {
             message: String::new(),
             annotations: Vec::new(),
             notes: Vec::new(),
+            suppressed_count: 0,
         }
     }
 
@@ -246,6 +269,12 @@ impl<FileId> Diagnostic<FileId> {
     /// Add some notes to the diagnostic.
     pub fn with_notes(mut self, mut notes: Vec<Note>) -> Self {
         self.notes.append(&mut notes);
+        self
+    }
+
+    /// Sets the number of suppressed diagnostics.
+    pub fn with_suppressed_count(mut self, suppressed_count: u32) -> Self {
+        self.suppressed_count = suppressed_count;
         self
     }
 }

@@ -8,6 +8,7 @@ use crate::render::color::ColorConfig;
 pub mod color;
 
 mod data;
+mod calculate;
 
 /// Result type for methods writing to a [`WriteColor`].
 ///
@@ -300,14 +301,31 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
         Ok(())
     }
 
-    fn render_single_source_line(&self, diagnostic: &Diagnostic<FileId>, file: FileId,
+    fn render_single_source_line(&mut self, diagnostic: &Diagnostic<FileId>, file: FileId,
                                  line_index: usize, main_line_index: usize,
                                  annotations: &[&Annotation<FileId>],
                                  continuing_annotations: &[&Annotation<FileId>]) -> Result {
+        self.write_line_begin(diagnostic, Some(line_index), " |", continuing_annotations)?;
+
+        self.colors.source(self.f)?;
+        writeln!(self.f, "{}", &self.files.source(file)?[self.files.line_range(file, line_index)?])?;
+        self.colors.reset(self.f)?;
+
+        if line_index != main_line_index {
+            return Ok(());
+        }
+
+        self.render_single_source_annotations(diagnostic, file, line_index, annotations, continuing_annotations)
+    }
+
+    fn render_single_source_annotations(&mut self, diagnostic: &Diagnostic<FileId>, file: FileId,
+                                        line_index: usize,
+                                        annotations: &[&Annotation<FileId>], continuing_annotations: &[&Annotation<FileId>]) -> Result {
+        // TODO
         Ok(())
     }
 
-    fn write_line_number(&mut self, line: Option<u32>, separator: &str) -> Result {
+    fn write_line_number(&mut self, line: Option<usize>, separator: &str) -> Result {
         if let Some(line) = line {
             self.colors.line_number(self.f)?;
             write!(self.f, "{:>fill$}", line, fill = self.line_digits as usize)?;
@@ -318,6 +336,20 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
         self.colors.line_number_separator(self.f)?;
         write!(self.f, "{}", separator)?;
         self.colors.reset(self.f)?;
+        Ok(())
+    }
+
+    fn write_line_begin(&mut self, diagnostic: &Diagnostic<FileId>, line: Option<usize>, separator: &str, continuing_annotations: &[&Annotation<FileId>]) -> Result {
+        self.write_line_number(line, separator)?;
+
+        for annotation in continuing_annotations.iter() {
+            self.colors.annotation(self.f, annotation.style, diagnostic.severity)?;
+            write!(self.f, "|")?;
+            self.colors.reset(self.f)?;
+            write!(self.f, " ")?;
+        }
+
+        write!(self.f, "{:>nested_blocks$}", "", nested_blocks = 2 * (self.max_nested_blocks - continuing_annotations.len()))?;
         Ok(())
     }
 

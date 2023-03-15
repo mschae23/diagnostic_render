@@ -1,6 +1,18 @@
 use crate::diagnostic::{AnnotationStyle, Severity};
 use crate::render::LineColumn;
 
+/// Data for a continuing multi-line annotation. This is an annotation that starts
+/// on a line before the currently rendered one, and ends after it.
+///
+/// This is drawn as a single `"|"` character to the left of the source code.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContinuingMultilineAnnotationData {
+    pub style: AnnotationStyle,
+    pub severity: Severity,
+    /// the index of this continuing vertical bar
+    pub vertical_bar_index: usize,
+}
+
 /// Data for a connecting multi-line annotation. This is an annotation that is
 /// running from the continuing vertical bars on the left over to its
 /// location in the source code on this line.
@@ -9,6 +21,7 @@ use crate::render::LineColumn;
 /// It can only occur once per line (but of course, multiple times per source line).
 ///
 /// This is drawn as underscores from the vertical bars to `end_location` (exclusive).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConnectingMultilineAnnotationData {
     pub style: AnnotationStyle,
     pub severity: Severity,
@@ -23,6 +36,7 @@ pub struct ConnectingMultilineAnnotationData {
 ///
 /// This is drawn as a single boundary character at `location`.
 /// This can occur multiple times per line.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StartAnnotationLineData {
     pub style: AnnotationStyle,
     pub severity: Severity,
@@ -36,6 +50,7 @@ pub struct StartAnnotationLineData {
 /// This is drawn as underline characters (or underscores if `as_multiline` is `true`)
 /// running from `start_column_index` (inclusive) to `end_column_index` (exclusive).
 /// This can occur multiple times per line.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConnectingSinglelineAnnotationData {
     pub style: AnnotationStyle, pub as_multiline: bool,
     pub severity: Severity,
@@ -48,6 +63,7 @@ pub struct ConnectingSinglelineAnnotationData {
 ///
 /// This is drawn as a single boundary character at `location`.
 /// This can occur multiple times per line.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EndAnnotationLineData {
     pub style: AnnotationStyle,
     pub severity: Severity,
@@ -62,6 +78,7 @@ pub struct EndAnnotationLineData {
 /// This can occur multiple times per line.
 ///
 /// [`StartAnnotationLineData`]: StartAnnotationLineData
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HangingAnnotationLineData {
     pub style: AnnotationStyle,
     pub severity: Severity,
@@ -79,9 +96,33 @@ pub struct HangingAnnotationLineData {
 /// This can only occur once per line.
 ///
 /// [`EndAnnotationLineData`]: EndAnnotationLineData
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LabelAnnotationLineData {
     pub style: AnnotationStyle,
     pub severity: Severity,
     pub location: LineColumn,
     pub label: String,
+}
+
+/// An enum with variants for [`StartAnnotationLineData`] and
+/// [`EndAnnotationLineData`], respectively.
+///
+/// [`StartAnnotationLineData`]: StartAnnotationLineData
+/// [`EndAnnotationLineData`]: EndAnnotationLineData
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StartEndAnnotationData {
+    Start(StartAnnotationLineData),
+    End(EndAnnotationLineData),
+    Both(StartAnnotationLineData, EndAnnotationLineData),
+}
+
+/// An enum for the different types of annotation data.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotationData {
+    ContinuingMultiline(ContinuingMultilineAnnotationData),
+    ConnectingMultiline(ConnectingMultilineAnnotationData),
+    ConnectingSingleline(ConnectingSinglelineAnnotationData),
+    End(EndAnnotationLineData),
+    Hanging(HangingAnnotationLineData),
+    Label(LabelAnnotationLineData),
 }

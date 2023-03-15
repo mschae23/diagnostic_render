@@ -79,19 +79,15 @@ impl std::error::Error for Error {
 /// A lifetime parameter `'a` is provided to allow any of the returned values to be returned by reference.
 /// This is to workaround the lack of higher kinded lifetime parameters.
 /// This can be ignored if this is not needed, however.
-pub trait Files<'a> {
+pub trait Files {
     /// A unique identifier for files in the file provider.
-    type FileId: 'a + Copy + Eq + Ord;
-    /// The user-facing name of a file, to be displayed in diagnostics.
-    type Name: 'a + std::fmt::Display;
-    /// The source code of a file.
-    type Source: 'a + AsRef<str>;
+    type FileId: Copy + Eq + Ord;
 
     /// The user-facing name of a file.
-    fn name(&'a self, id: Self::FileId) -> Result<Self::Name, Error>;
+    fn name(&self, id: Self::FileId) -> Result<&str, Error>;
 
     /// The source code of a file.
-    fn source(&'a self, id: Self::FileId) -> Result<Self::Source, Error>;
+    fn source(&self, id: Self::FileId) -> Result<&str, Error>;
 
     /// The index of the line at the given byte index.
     /// If the byte index is past the end of the file, returns the maximum line index in the file.
@@ -106,7 +102,7 @@ pub trait Files<'a> {
     ///
     /// [`line_starts`]: line_starts
     /// [`file`]: crate::file
-    fn line_index(&'a self, id: Self::FileId, byte_index: usize) -> Result<usize, Error>;
+    fn line_index(&self, id: Self::FileId, byte_index: usize) -> Result<usize, Error>;
 
     /// The user-facing line number at the given line index.
     /// It is not necessarily checked that the specified line index
@@ -120,7 +116,7 @@ pub trait Files<'a> {
     ///
     /// [line-macro]: https://en.cppreference.com/w/c/preprocessor/line
     #[allow(unused_variables)]
-    fn line_number(&'a self, id: Self::FileId, line_index: usize) -> Result<usize, Error> {
+    fn line_number(&self, id: Self::FileId, line_index: usize) -> Result<usize, Error> {
         Ok(line_index + 1)
     }
 
@@ -135,7 +131,7 @@ pub trait Files<'a> {
     /// [`file`]: crate::file
     /// [`column_index`]: column_index
     fn column_number(
-        &'a self,
+        &self,
         id: Self::FileId,
         line_index: usize,
         byte_index: usize,
@@ -149,7 +145,7 @@ pub trait Files<'a> {
 
     /// Convenience method for returning line and column number at the given
     /// byte index in the file.
-    fn location(&'a self, id: Self::FileId, byte_index: usize) -> Result<Location, Error> {
+    fn location(&self, id: Self::FileId, byte_index: usize) -> Result<Location, Error> {
         let line_index = self.line_index(id, byte_index)?;
 
         Ok(Location {
@@ -159,7 +155,7 @@ pub trait Files<'a> {
     }
 
     /// The byte range of a line in the source of the file.
-    fn line_range(&'a self, id: Self::FileId, line_index: usize) -> Result<Range<usize>, Error>;
+    fn line_range(&self, id: Self::FileId, line_index: usize) -> Result<Range<usize>, Error>;
 }
 
 /// A user-facing location in a source file.
@@ -266,10 +262,7 @@ pub struct SimpleFile<Name, Source> {
     line_starts: Vec<usize>,
 }
 
-impl<Name, Source> SimpleFile<Name, Source>
-    where
-        Name: std::fmt::Display,
-        Source: AsRef<str> {
+impl<Name, Source> SimpleFile<Name, Source> where Name: AsRef<str>, Source: AsRef<str> {
     /// Create a new source file.
     pub fn new(name: Name, source: Source) -> SimpleFile<Name, Source> {
         SimpleFile {
@@ -309,17 +302,11 @@ impl<Name, Source> SimpleFile<Name, Source>
     }
 }
 
-impl<'a, Name, Source> Files<'a> for SimpleFile<Name, Source>
-    where
-        Name: 'a + std::fmt::Display + Clone,
-        Source: 'a + AsRef<str>,
-{
+impl<Name, Source> Files for SimpleFile<Name, Source> where Name: AsRef<str>, Source: AsRef<str> {
     type FileId = ();
-    type Name = Name;
-    type Source = &'a str;
 
-    fn name(&self, (): ()) -> Result<Name, Error> {
-        Ok(self.name.clone())
+    fn name(&self, (): ()) -> Result<&str, Error> {
+        Ok(self.name.as_ref())
     }
 
     fn source(&self, (): ()) -> Result<&str, Error> {
@@ -351,13 +338,12 @@ pub struct SimpleFiles<Name, Source> {
     files: Vec<SimpleFile<Name, Source>>,
 }
 
-impl<Name, Source> SimpleFiles<Name, Source>
-    where
-        Name: std::fmt::Display,
-        Source: AsRef<str> {
+impl<Name, Source> SimpleFiles<Name, Source> where Name: AsRef<str>, Source: AsRef<str> {
     /// Create a new files database.
     pub fn new() -> SimpleFiles<Name, Source> {
-        SimpleFiles { files: Vec::new() }
+        SimpleFiles {
+            files: Vec::new()
+        }
     }
 
     /// Add a file to the database, returning the handle that can be used to
@@ -374,16 +360,11 @@ impl<Name, Source> SimpleFiles<Name, Source>
     }
 }
 
-impl<'a, Name, Source> Files<'a> for SimpleFiles<Name, Source>
-    where
-        Name: 'a + std::fmt::Display + Clone,
-        Source: 'a + AsRef<str> {
+impl<Name, Source> Files for SimpleFiles<Name, Source> where Name: AsRef<str>, Source: AsRef<str> {
     type FileId = usize;
-    type Name = Name;
-    type Source = &'a str;
 
-    fn name(&self, file_id: usize) -> Result<Name, Error> {
-        Ok(self.get(file_id)?.name().clone())
+    fn name(&self, file_id: usize) -> Result<&str, Error> {
+        Ok(self.get(file_id)?.name().as_ref())
     }
 
     fn source(&self, file_id: usize) -> Result<&str, Error> {

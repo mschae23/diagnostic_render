@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::marker::PhantomData;
 use termcolor::WriteColor;
 use crate::diagnostic::{Annotation, AnnotationStyle, Diagnostic};
 use crate::file::{Error, Files};
@@ -56,24 +57,27 @@ pub struct RenderConfig {
 
 /// An ASCII renderer for diagnostics.
 #[derive(Debug)]
-pub struct DiagnosticRenderer<'w, W, C, F> {
+pub struct DiagnosticRenderer<'w, W, C, FileId, F> {
     f: &'w mut W, colors: C, files: F, config: RenderConfig,
     max_nested_blocks: usize, line_digits: u32,
+    _phantom_data: PhantomData<FileId>,
 }
 
-impl<'w, W, C, F> DiagnosticRenderer<'w, W, C, F> {
+impl<'w, W, C, FileId, F> DiagnosticRenderer<'w, W, C, FileId, F> {
     /// Creates a new diagnostics renderer.
     pub fn new(f: &'w mut W, colors: C, files: F, config: RenderConfig) -> Self {
         DiagnosticRenderer {
             f, colors, files, config,
             max_nested_blocks: 0, line_digits: 0,
+            _phantom_data: PhantomData,
         }
     }
 }
 
-impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticRenderer<'w, W, C, F> where F::Source<'source>: AsRef<str> {
+impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> DiagnosticRenderer<'w, W, C, FileId, F>
+    where FileId: Copy + Eq + Ord {
     /// Renders the given diagnostics.
-    pub fn render(&mut self, diagnostics: Vec<Diagnostic<F::FileId<'_>>>) -> Result {
+    pub fn render(&mut self, diagnostics: Vec<Diagnostic<F::FileId>>) -> Result {
         if diagnostics.is_empty() {
             return Ok(());
         }
@@ -81,7 +85,7 @@ impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticR
         self.render_impl(diagnostics)
     }
 
-    fn render_impl(&mut self, diagnostics: Vec<Diagnostic<F::FileId<'_>>>) -> Result {
+    fn render_impl(&mut self, diagnostics: Vec<Diagnostic<F::FileId>>) -> Result {
         let diagnostics_len = diagnostics.len();
 
         for (i, diagnostic) in diagnostics.into_iter().enumerate() {
@@ -95,7 +99,7 @@ impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticR
         Ok(())
     }
 
-    fn render_diagnostic(&mut self, mut diagnostic: Diagnostic<F::FileId<'_>>) -> Result {
+    fn render_diagnostic(&mut self, mut diagnostic: Diagnostic<FileId>) -> Result {
         self.render_diagnostic_header(&diagnostic)?;
 
         let suppressed_count = diagnostic.suppressed_count;
@@ -111,7 +115,7 @@ impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticR
             self.line_digits = last_printed_line.ilog10() + 1;
 
             let annotations = diagnostic.annotations.drain(0..diagnostic.annotations.len())
-                .fold(BTreeMap::<F::FileId<'_>, Vec<Annotation<F::FileId<'_>>>>::new(), |mut acc, a| {
+                .fold(BTreeMap::<F::FileId, Vec<Annotation<F::FileId>>>::new(), |mut acc, a| {
                     acc.entry(a.file_id).or_default().push(a);
                     acc
                 });
@@ -131,7 +135,7 @@ impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticR
         Ok(())
     }
 
-    fn render_diagnostic_header(&mut self, diagnostic: &Diagnostic<F::FileId<'_>>) -> Result {
+    fn render_diagnostic_header(&mut self, diagnostic: &Diagnostic<FileId>) -> Result {
         self.colors.severity(self.f, diagnostic.severity)?;
         write!(self.f, "{}", diagnostic.severity)?;
         // self.colors.reset(f)?;
@@ -158,7 +162,7 @@ impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticR
         Ok(())
     }
 
-    fn render_diagnostic_file(&mut self, diagnostic: &Diagnostic<F::FileId<'_>>, file: F::FileId<'_>, mut annotations: Vec<Annotation<F::FileId<'_>>>) -> Result {
+    fn render_diagnostic_file(&mut self, diagnostic: &Diagnostic<F::FileId>, file: FileId, mut annotations: Vec<Annotation<FileId>>) -> Result {
         let location = annotations.iter()
             .filter(|a| a.style == AnnotationStyle::Primary)
             .map(|a| (a.file_id, a.range.start))
@@ -185,7 +189,7 @@ impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticR
         Ok(())
     }
 
-    fn render_lines_with_annotations(&mut self, diagnostic: &Diagnostic<F::FileId<'_>>, file: F::FileId<'_>, annotations: Vec<Annotation<F::FileId<'_>>>) -> Result {
+    fn render_lines_with_annotations(&mut self, diagnostic: &Diagnostic<FileId>, file: FileId, annotations: Vec<Annotation<FileId>>) -> Result {
         let mut already_printed_to = 0;
         let mut annotations_on_line_indices = Vec::new();
         let mut continuing_annotations_indices = Vec::new();
@@ -193,7 +197,7 @@ impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticR
         let mut last_line_index = None;
         let mut min_index = 0;
 
-        let last_line_index_in_file = self.files.line_index(file, self.files.source(file)?.as_ref().len() - 1)?;
+        let last_line_index_in_file = self.files.line_index(file, self.files.source(file)?.len() - 1)?;
 
         loop {
             current_line_index = match annotations.iter().skip(min_index).next() {
@@ -227,7 +231,7 @@ impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticR
                 // Different way to render things is used here, not sure if this is needed
                 // self.fix_connecting_annotations(current_line_index, &mut annotations, &annotations_on_line_indices);
 
-                self.render_part_lines(file, current_line_index, last_line_index,
+                self.render_part_lines(diagnostic, file, current_line_index, last_line_index,
                     annotations_on_line_indices.iter().map(|i| &annotations[*i]).collect::<Vec<_>>(),
                     continuing_annotations_indices.iter().map(|i| &annotations[*i]).collect::<Vec<_>>(),
                     &mut already_printed_to)?;
@@ -240,15 +244,15 @@ impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticR
 
         if let Some(last_line) = last_line_index {
             if (last_line as usize) <= self.get_last_line_index(file)? {
-                self.render_post_surrounding_lines(file, self.get_last_line_index(file)? + 1, last_line, &[], &mut already_printed_to)?;
+                self.render_post_surrounding_lines(diagnostic, file, self.get_last_line_index(file)? + 1, last_line, &[], &mut already_printed_to)?;
             }
         }
 
         Ok(())
     }
 
-    fn render_post_surrounding_lines(&mut self, file: F::FileId<'_>, main_line: usize, last_line: usize,
-                                    continuing_annotations: &[&Annotation<F::FileId<'_>>],
+    fn render_post_surrounding_lines(&mut self, diagnostic: &Diagnostic<FileId>, file: FileId, main_line: usize, last_line: usize,
+                                    continuing_annotations: &[&Annotation<FileId>],
                                     already_printed_to_line_index: &mut usize) -> Result {
         // writeln!(f, "[debug] potentially printing post surrounding lines, last line: {}, already printed to: {}", last_line, *already_printed_to)?;
 
@@ -260,7 +264,7 @@ impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticR
 
             if last_print_line >= first_print_line {
                 for line in first_print_line..=last_print_line {
-                    self.render_single_source_line(file, line, last_line, &[], continuing_annotations)?;
+                    self.render_single_source_line(diagnostic, file, line, last_line, &[], continuing_annotations)?;
                     *already_printed_to_line_index = line;
                 }
             }
@@ -269,20 +273,37 @@ impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticR
         Ok(())
     }
 
-    fn render_part_lines(&mut self, file: F::FileId<'_>, main_line_index: usize, last_line_index: Option<usize>,
-                        annotations_on_line: Vec<&Annotation<F::FileId<'_>>>,
-                        continuing_annotations: Vec<&Annotation<F::FileId<'_>>>,
+    fn render_part_lines(&mut self, diagnostic: &Diagnostic<FileId>, file: FileId,
+                         main_line_index: usize, last_line_index: Option<usize>,
+                        annotations_on_line: Vec<&Annotation<FileId>>,
+                        continuing_annotations: Vec<&Annotation<FileId>>,
                         already_printed_to_line_index: &mut usize) -> Result {
         if let Some(last_line) = last_line_index {
-            self.render_post_surrounding_lines(file, main_line_index, last_line, &continuing_annotations, already_printed_to_line_index)?;
+            self.render_post_surrounding_lines(diagnostic, file, main_line_index, last_line, &continuing_annotations, already_printed_to_line_index)?;
+        }
+
+        let first_print_line_index = self.get_start_print_line(main_line_index).max(*already_printed_to_line_index + 1);
+        let last_print_line_index = main_line_index;
+
+        // writeln!(f, "[debug] current line ({}); first = {}, last = {}", main_line, first_print_line, last_print_line)?;
+
+        if first_print_line_index > *already_printed_to_line_index + 1 {
+            self.write_line_number(None, "...")?;
+            writeln!(self.f)?;
+        }
+
+        for line in first_print_line_index..=last_print_line_index {
+            self.render_single_source_line(diagnostic, file, line, main_line_index, &annotations_on_line, &continuing_annotations)?;
+            *already_printed_to_line_index = line;
         }
 
         Ok(())
     }
 
-    fn render_single_source_line(&self, file: F::FileId<'_>, line: usize, last_line: usize,
-                                 annotations: &[&Annotation<F::FileId<'_>>],
-                                 continuing_annotations: &[&Annotation<F::FileId<'_>>]) -> Result {
+    fn render_single_source_line(&self, diagnostic: &Diagnostic<FileId>, file: FileId,
+                                 line_index: usize, main_line_index: usize,
+                                 annotations: &[&Annotation<FileId>],
+                                 continuing_annotations: &[&Annotation<FileId>]) -> Result {
         Ok(())
     }
 
@@ -308,12 +329,12 @@ impl<'source, 'w, W: WriteColor, C: ColorConfig, F: Files + 'source> DiagnosticR
         }
     }
 
-    fn get_last_print_line(&self, file: F::FileId<'_>, line: usize) -> std::result::Result<usize, Error> {
+    fn get_last_print_line(&self, file: FileId, line: usize) -> std::result::Result<usize, Error> {
         Ok((line + self.config.surrounding_lines).min(self.get_last_line_index(file)?))
     }
 
-    fn get_last_line_index(&self, file: F::FileId<'_>) -> std::result::Result<usize, Error> {
-        Ok(self.files.line_index(file, self.files.source(file)?.as_ref().len() - 1)?)
+    fn get_last_line_index(&self, file: FileId) -> std::result::Result<usize, Error> {
+        Ok(self.files.line_index(file, self.files.source(file)?.len() - 1)?)
     }
 }
 

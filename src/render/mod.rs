@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use termcolor::WriteColor;
 use crate::diagnostic::{Annotation, AnnotationStyle, Diagnostic};
@@ -76,7 +77,7 @@ impl<'w, W, C, FileId, F> DiagnosticRenderer<'w, W, C, FileId, F> {
 }
 
 impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> DiagnosticRenderer<'w, W, C, FileId, F>
-    where FileId: Copy + Eq + Ord {
+    where FileId: Copy + Debug + Eq + Ord {
     /// Renders the given diagnostics.
     pub fn render(&mut self, diagnostics: Vec<Diagnostic<F::FileId>>) -> Result {
         if diagnostics.is_empty() {
@@ -321,6 +322,8 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
     fn render_single_source_annotations(&mut self, diagnostic: &Diagnostic<FileId>, file: FileId,
                                         line_index: usize,
                                         annotations: &[&Annotation<FileId>], continuing_annotations: &[&Annotation<FileId>]) -> Result {
+        let _data = calculate::calculate(diagnostic, &self.files, file, line_index, annotations, continuing_annotations)?;
+
         // TODO
         Ok(())
     }

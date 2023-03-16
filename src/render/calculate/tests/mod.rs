@@ -29,6 +29,12 @@ fn test_calculate_1() {
                 severity: Severity::Error,
                 location: LineColumn::new(0, 9),
             }),
+            AnnotationData::Label(LabelAnnotationLineData {
+                style: AnnotationStyle::Primary,
+                severity: Severity::Error,
+                location: LineColumn::new(0, 11),
+                label: String::from("test label"),
+            }),
         ],
     ]);
 }

@@ -121,6 +121,7 @@ pub enum StartEndAnnotationData {
 pub enum AnnotationData {
     ContinuingMultiline(ContinuingMultilineAnnotationData),
     ConnectingMultiline(ConnectingMultilineAnnotationData),
+    Start(StartAnnotationLineData),
     ConnectingSingleline(ConnectingSinglelineAnnotationData),
     End(EndAnnotationLineData),
     Hanging(HangingAnnotationLineData),

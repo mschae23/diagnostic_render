@@ -74,7 +74,7 @@ pub fn calculate<FileId: Copy + Debug>(diagnostic: &Diagnostic<FileId>, files: &
     let vertical_offsets = calculate_vertical_offsets(&starts_ends)?;
     eprintln!("[debug] vertical offsets: {:?}", &vertical_offsets);
 
-    let final_data = calculate_final_data(diagnostic, files, file, line_index, &starts_ends, &vertical_offsets, continuing_annotations)?;
+    let final_data = calculate_final_data(diagnostic, files, file, line_index, &starts_ends, vertical_offsets, continuing_annotations)?;
     Ok(final_data)
 }
 
@@ -109,11 +109,11 @@ fn calculate_vertical_offsets<FileId: Copy + Debug>(starts_ends: &[(&Annotation<
     //    |                        the parameter list
     for (i, (a, start_end)) in starts_ends.iter().enumerate().rev() {
         match start_end {
-            StartEndAnnotationData::Both(_, _) => {
+            StartEndAnnotationData::Both(start, _) => {
                 if a.label.is_empty() {
                     // If a single-line annotation has no label, it doesn't take vertical space
 
-                    if i == 0 {
+                    if i == starts_ends.len() - 1 {
                         // Except if it's the rightmost one, in which case the next annotation
                         // has to start on vertical offset 1
                         next_vertical_offset += 1;
@@ -121,6 +121,29 @@ fn calculate_vertical_offsets<FileId: Copy + Debug>(starts_ends: &[(&Annotation<
 
                     processed[i] = true;
                     continue;
+                }
+
+                // Special case for when there is a rightmost single-line annotation,
+                // but another one ends after that one starts.
+                // In this case, all vertical offsets need to be incremented by 1.
+                if next_vertical_offset == 0 {
+                    // Iterate through starts_ends again (same order, in reverse)
+                    // The last one has to be skipped, as that is definitely this one
+                    // and will make the condition always match
+                    for (_j, (_, start_end_2)) in starts_ends.iter().enumerate().rev().skip(1) {
+                        let end = match start_end_2 {
+                            // If one of these ends after the rightmost single-line annotation,
+                            // increase vertical_offset by 1 for all annotations
+                            StartEndAnnotationData::Start(start) => start.location.column_index,
+                            StartEndAnnotationData::End(end) => end.location.column_index,
+                            StartEndAnnotationData::Both(_, end) => end.location.column_index,
+                        };
+
+                        if end >= start.location.column_index {
+                            next_vertical_offset += 1;
+                            break;
+                        }
+                    }
                 }
 
                 vertical_offsets[i] = next_vertical_offset;
@@ -189,7 +212,7 @@ fn calculate_vertical_offsets<FileId: Copy + Debug>(starts_ends: &[(&Annotation<
         //    | |     |    |
         //    | |     |    some label
         //    | |     some other label
-        // This is something that is calculated later, though.
+        // This is something that is calculated later, not in this function.
         for (i, _) in starts.into_iter().rev() {
             vertical_offsets[i] = next_vertical_offset;
             next_vertical_offset += 1;
@@ -213,10 +236,9 @@ fn calculate_vertical_offsets<FileId: Copy + Debug>(starts_ends: &[(&Annotation<
     // With a single-line annotation before it:
     // 23 |     pub fn example_function(&mut self, argument: usize) -> usize {
     //    |                                        ---------------           ^
-    //    |                                        |                         |
-    //    |                                        a parameter               |
-    //    |  ________________________________________________________________|
-    //    | |
+    //    |  ______________________________________|_________________________|
+    //    | |                                      |
+    //    | |                                      a parameter
     //
     // With an ending annotation before it:
     // 23 | |   pub fn example_function(&mut self, argument: usize) -> usize {
@@ -245,7 +267,7 @@ fn calculate_vertical_offsets<FileId: Copy + Debug>(starts_ends: &[(&Annotation<
 fn calculate_final_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, files: &impl Files<FileId=FileId>, file: FileId,
                                       line_index: usize,
                                       starts_ends: &[(&Annotation<FileId>, StartEndAnnotationData)],
-                        vertical_offsets: &[u32],
+                                      mut vertical_offsets: Vec<u32>,
                                       continuing_annotations: &[&Annotation<FileId>]) -> Result<Vec<Vec<AnnotationData>>, Error> {
     // Create a sorted vector with the vertical offsets (and an index into starts_ends)
     let mut vertical_offsets_sorted = vertical_offsets.iter().enumerate()
@@ -360,16 +382,14 @@ fn calculate_final_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, files: &i
     let mut additional_continuing_indices = Vec::new(); // controlled by calculate_single_line_data()
     let mut final_data = vec![data];
 
-    for (i, offset) in vertical_offsets_sorted.iter() {
-        let i = *i;
+    for (_i, offset) in vertical_offsets_sorted.iter() {
         let vertical_offset = *offset;
-        let (_annotation, _start_end) = &starts_ends[i];
 
         if vertical_offset > vertical_index {
             vertical_index = vertical_offset;
             final_data.push(calculate_single_line_data(diagnostic, files, file, line_index, vertical_index,
                 continuing_annotations, continuing_take_index, &mut additional_continuing_indices,
-                &starts_ends, &vertical_offsets)?);
+                starts_ends, &mut vertical_offsets)?);
         }
     }
 
@@ -381,7 +401,7 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, fil
                                             continuing_annotations: &[&Annotation<FileId>], continuing_take_index: usize,
                                             additional_continuing_indices: &mut Vec<usize>,
                                             starts_ends: &[(&Annotation<FileId>, StartEndAnnotationData)],
-                                            vertical_offsets: &[u32]) -> Result<Vec<AnnotationData>, Error> {
+                                            vertical_offsets: &mut [u32]) -> Result<Vec<AnnotationData>, Error> {
     // Create ContinuingMultiline data for the continuing vertical bars at the start.
     let mut data = continuing_annotations.iter().take(continuing_take_index)
         .fold(Vec::new(), |mut acc, a| {
@@ -421,6 +441,8 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, fil
         }))
     }
 
+    let mut push_down_end = None;
+
     // This does different things depending on the vertical_index:
     // If vertical_index is 0:
     //   add the start and end boundary and single-line connecting annotation data (the "^^^^^^^^^")
@@ -443,6 +465,8 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, fil
                         vertical_bar_index: continuing_annotations.len() - continuing_take_index + additional_continuing_indices.len(),
                     }));
                     additional_continuing_indices.push(i);
+
+                    push_down_end = Some(vertical_index);
                 }
 
                 if vertical_index == 0 {
@@ -542,9 +566,33 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, fil
         acc
     });
 
+    if let Some(to_offset) = push_down_end {
+        let mut next_vertical_offset = to_offset + 2;
+
+        for (i, offset) in vertical_offsets.iter_mut().enumerate() {
+            let (a, start_end) = &starts_ends[i];
+
+            match start_end {
+                // end and both, which should be below start, need to be moved down
+                StartEndAnnotationData::End(_) | StartEndAnnotationData::Both(_, _) => {},
+                // don't affect starting annotations
+                StartEndAnnotationData::Start(_) => continue,
+            }
+
+            if *offset <= to_offset && !a.label.is_empty() {
+                // It can't be equal, because we would have a starting annotation then
+                assert_ne!(*offset, to_offset);
+
+                *offset = next_vertical_offset;
+                next_vertical_offset += 1;
+            }
+        }
+    }
+
     // TODO Hasn't been adjusted to the code being moved into a function
     //      that also runs on vertical indices > 0
-    if vertical_offsets[starts_ends.len() - 1] == 0 {
+    // Actually, maybe this just works anyway
+    if vertical_index == 0 && vertical_offsets[starts_ends.len() - 1] == 0 {
         let (a, start_end) = &starts_ends[starts_ends.len() - 1];
 
         let label_pos = match start_end {

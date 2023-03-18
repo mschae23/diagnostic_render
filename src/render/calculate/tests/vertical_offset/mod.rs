@@ -1,6 +1,8 @@
+use pretty_assertions::{assert_eq, assert_ne};
 use super::*;
 
 mod singleline {
+    use pretty_assertions::{assert_eq, assert_ne};
     use super::*;
 
     #[test]
@@ -126,6 +128,7 @@ mod singleline {
 }
 
 mod ending {
+    use pretty_assertions::{assert_eq, assert_ne};
     use super::*;
 
     #[test]
@@ -136,8 +139,8 @@ mod ending {
         let annotation1 = Annotation::new(AnnotationStyle::Primary, (), 0..19)
             .with_label("something");
 
-        // 2 | | | something += 3.0;
-        //   | | |_____^ // vertical offset 0
+        // 2 | | something += 3.0;
+        //   | |_____^ // vertical offset 0
 
         let starts_ends = vec![
             (&annotation1, StartEndAnnotationData::End(EndAnnotationLineData {
@@ -152,36 +155,6 @@ mod ending {
 
     #[test]
     fn test_2() {
-        let _file = SimpleFile::new("test_file.test", "let main = 23;\nsomething += 3.0;\nprint(example_source();\n");
-        let _diagnostic: Diagnostic<()> = Diagnostic::new(Severity::Error);
-
-        let annotation1 = Annotation::new(AnnotationStyle::Primary, (), 0..19)
-            .with_label("something");
-        let annotation2 = Annotation::new(AnnotationStyle::Secondary, (), 4..28)
-            .with_label("something else");
-
-        // 2 | | | something += 3.0;
-        //   | | |_____^        ^ // vertical offset 0
-        //   | |________________| // vertical offset 1
-
-        let starts_ends = vec![
-            (&annotation1, StartEndAnnotationData::End(EndAnnotationLineData {
-                style: AnnotationStyle::Primary,
-                severity: Severity::Error,
-                location: LineColumn::new(1, 4),
-            })),
-            (&annotation2, StartEndAnnotationData::End(EndAnnotationLineData {
-                style: AnnotationStyle::Secondary,
-                severity: Severity::Error,
-                location: LineColumn::new(1, 13),
-            })),
-        ];
-
-        assert_eq!(calculate_vertical_offsets(&starts_ends).unwrap(), vec![1, 0]);
-    }
-
-    #[test]
-    fn test_overlapping_1() {
         let _file = SimpleFile::new("test_file.test", "let main = 23;\nsomething += 3.0;\nprint(example_source();\n");
         let _diagnostic: Diagnostic<()> = Diagnostic::new(Severity::Error);
 
@@ -210,11 +183,46 @@ mod ending {
             })),
         ];
 
-        assert_eq!(calculate_vertical_offsets(&starts_ends).unwrap(), vec![0, 1]);
+        assert_eq!(calculate_vertical_offsets(&starts_ends).unwrap(), vec![1, 0]);
+    }
+
+    #[test]
+    fn test_overlapping_1() {
+        let _file = SimpleFile::new("test_file.test", "let main = 23;\nsomething += 3.0;\nprint(example_source();\n");
+        let _diagnostic: Diagnostic<()> = Diagnostic::new(Severity::Error);
+
+        let annotation1 = Annotation::new(AnnotationStyle::Primary, (), 0..19)
+            .with_label("something");
+        let annotation2 = Annotation::new(AnnotationStyle::Secondary, (), 4..28)
+            .with_label("something else");
+
+        // 1 |     let main = 23; // Vertical offsets for annotations on this line are not tested by this test
+        //   |  ___^   ^
+        //   | |  _____|
+        // 2 | | | something += 3.0;
+        //   | | |     ^        ^ // vertical offset 0
+        //   | | |_____|________| // vertical offset 1
+        //   | |_______|          // vertical offset 2
+
+        let starts_ends = vec![
+            (&annotation1, StartEndAnnotationData::End(EndAnnotationLineData {
+                style: AnnotationStyle::Primary,
+                severity: Severity::Error,
+                location: LineColumn::new(1, 4),
+            })),
+            (&annotation2, StartEndAnnotationData::End(EndAnnotationLineData {
+                style: AnnotationStyle::Secondary,
+                severity: Severity::Error,
+                location: LineColumn::new(1, 13),
+            })),
+        ];
+
+        assert_eq!(calculate_vertical_offsets(&starts_ends).unwrap(), vec![2, 1]);
     }
 }
 
 mod starting {
+    use pretty_assertions::{assert_eq, assert_ne};
     use super::*;
 
     #[test]

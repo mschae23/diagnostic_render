@@ -68,7 +68,7 @@ pub fn calculate<FileId: Copy + Debug>(diagnostic: &Diagnostic<FileId>, files: &
             StartEndAnnotationData::End(b) => b.location.column_index,
         }));
 
-    eprintln!("[debug] {:#?}", &starts_ends);
+    // eprintln!("[debug] {:#?}", &starts_ends);
 
     // Calculate vertical offsets
     let vertical_offsets = calculate_vertical_offsets(&starts_ends)?;
@@ -316,113 +316,33 @@ fn calculate_final_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, files: &i
     let mut vertical_offsets_sorted = vertical_offsets.iter().enumerate()
         .map(|(i, offset)| (i, *offset)).collect::<Vec<_>>();
     vertical_offsets_sorted.sort_by(|(_, a), (_, b)| a.cmp(b)); // sort by the vertical offset
-    // How many elements from the start of continuing_annotations to take
-    // len() - 1 could cause an underflow (panic), and take() stops when the end of the iter is reached anyway
-    let mut continuing_take_index: usize = continuing_annotations.len();
+    // How many elements from the start of continuing_annotations to take.
+    // Exclusive, the index referred to is not included.
+    let mut continuing_end_index: usize = 0;
 
-    for (i, a) in continuing_annotations.iter().enumerate().rev() {
-        // Once we reach a continuing annotation that started before this line,
-        // all the ones before it in the vector should start before too, so we can stop here
+    for (i, a) in continuing_annotations.iter().enumerate() {
+        // Once we reach a continuing annotation that started on this line,
+        // all the ones after it in the vector should start later too, so we can stop here
         // and use i as the last index to use for the continuing vertical bars on the first line
-        if files.line_index(file, a.range.start)? < line_index {
-            continuing_take_index = i;
+        if files.line_index(file, a.range.start)? >= line_index {
+            continuing_end_index = i;
             break;
         }
     }
+
+    eprintln!("[debug] continuing take index: {}", continuing_end_index);
 
     // the last vertical index; can be used to estimate how many lines are needed for
     // displaying the annotations.
     // This is not exact, as there can be extra lines for labels, as one example.
     let _final_vertical_index = vertical_offsets_sorted.last().map(|(_, offset)| *offset).unwrap_or(1);
 
-    // Create ContinuingMultiline data for the continuing vertical bars at the start.
-    let mut data = continuing_annotations.iter().take(continuing_take_index)
-        .fold(Vec::new(), |mut acc, a| {
-            acc.push(AnnotationData::ContinuingMultiline(ContinuingMultilineAnnotationData {
-                style: a.style,
-                severity: diagnostic.severity,
-                vertical_bar_index: acc.len(),
-            }));
-            acc
-        });
+    let mut additional_continuing_indices = Vec::new(); // controlled by calculate_single_line_data()
 
-    // Add a ConnectingMultiline element if needed (if there is an ending multi-line annotation with vertical offset == 0)
-    // this is the horizontal "_____" line running from the continuing vertical bar to the location
-    // that the annotations ends at
-    if let Some((i, _)) = vertical_offsets.iter().enumerate().find(|(i, &offset)| offset == 0 && match starts_ends[*i].1 {
-        StartEndAnnotationData::End(_) => true,
-        StartEndAnnotationData::Start(_) | StartEndAnnotationData::Both(_, _) => false,
-    }) {
-        let a = starts_ends[i].0;
-
-        data.push(AnnotationData::ConnectingMultiline(ConnectingMultilineAnnotationData {
-            style: a.style,
-            severity: diagnostic.severity,
-            end_location: LineColumn::new(line_index, a.range.end - files.line_range(file, line_index)?.start),
-            // All elements in data so far are ContinuingMultiline, so this one must connect to the last one
-            vertical_bar_index: data.len() - 1,
-        }))
-    }
-
-    // Add the start and end boundary and single-line connecting annotation data (the "^^^^^^^^^")
-    let mut data = vertical_offsets.iter().enumerate().fold(data, |mut acc, (i, _)| {
-        let (annotation, start_end) = &starts_ends[i];
-
-        match start_end {
-            StartEndAnnotationData::Start(start) => {
-                // A single start boundary marker. This should either have a connecting element
-                // either in this line or on a later one (with hanging elements ("|") in between)
-                acc.push(AnnotationData::Start(start.clone()));
-            },
-            StartEndAnnotationData::End(end) => {
-                // Same here
-                acc.push(AnnotationData::End(end.clone()));
-            },
-            StartEndAnnotationData::Both(start, end) => {
-                // Add start and end boundary elements and the connecting line between them.
-                // They all have the same character, so they will be rendered as a single line:
-                // "^^^^^^^^^" or "---------"
-                acc.push(AnnotationData::Start(start.clone()));
-                acc.push(AnnotationData::ConnectingSingleline(ConnectingSinglelineAnnotationData {
-                    style: annotation.style,
-                    as_multiline: false,
-                    severity: diagnostic.severity,
-                    line_index,
-                    // Intersects with the start boundary character, but the renderer will prefer
-                    // that one over this connecting line anyway
-                    start_column_index: start.location.column_index,
-                    end_column_index: end.location.column_index,
-                }));
-                acc.push(AnnotationData::End(end.clone()));
-            },
-        };
-
-        acc
-    });
-
-    if vertical_offsets[starts_ends.len() - 1] == 0 {
-        let (a, start_end) = &starts_ends[starts_ends.len() - 1];
-
-        let label_pos = match start_end {
-            StartEndAnnotationData::End(end) => Some(end.location.column_index),
-            StartEndAnnotationData::Both(_, end) => Some(end.location.column_index),
-            StartEndAnnotationData::Start(_) => None,
-        };
-        let has_label = label_pos.is_some() && !a.label.is_empty();
-
-        if let (true, Some(label_pos)) = (has_label, label_pos) {
-            data.push(AnnotationData::Label(LabelAnnotationLineData {
-                style: a.style,
-                severity: diagnostic.severity,
-                location: LineColumn::new(line_index, label_pos + 1),
-                label: a.label.clone(),
-            }));
-        }
-    }
+    let data = calculate_single_line_data(diagnostic, files, file, line_index, 0, continuing_annotations, continuing_end_index, &mut additional_continuing_indices, &starts_ends, &mut vertical_offsets)?;
 
     // At which vertical index we currently are (should correspond to vertical offset of the annotations)
     let mut vertical_index = 1; // first line after the one with the underlines
-    let mut additional_continuing_indices = Vec::new(); // controlled by calculate_single_line_data()
     let mut final_data = vec![data];
 
     for (_i, offset) in vertical_offsets_sorted.iter() {
@@ -431,9 +351,18 @@ fn calculate_final_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, files: &i
         if vertical_offset > vertical_index {
             vertical_index = vertical_offset;
             final_data.push(calculate_single_line_data(diagnostic, files, file, line_index, vertical_index,
-                continuing_annotations, continuing_take_index, &mut additional_continuing_indices,
+                continuing_annotations, continuing_end_index, &mut additional_continuing_indices,
                 starts_ends, &mut vertical_offsets)?);
         }
+    }
+
+    // Sort by start column index.
+    // The code above sometimes inserts things in the wrong order, like single-line
+    // data (always Start, ConnectingSingleline, End, with nothing in between).
+    // However, for intersecting annotations, the Start data of one has to appear before
+    // the End data of the last for rendering this properly.
+    for data in final_data.iter_mut() {
+        data.sort_by(|a, b| a.column_index().cmp(&b.column_index()));
     }
 
     Ok(final_data)
@@ -441,12 +370,12 @@ fn calculate_final_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, files: &i
 
 fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, files: &impl Files<FileId=FileId>, file: FileId,
                                             line_index: usize, vertical_index: u32,
-                                            continuing_annotations: &[&Annotation<FileId>], continuing_take_index: usize,
+                                            continuing_annotations: &[&Annotation<FileId>], continuing_end_index: usize,
                                             additional_continuing_indices: &mut Vec<usize>,
                                             starts_ends: &[(&Annotation<FileId>, StartEndAnnotationData)],
                                             vertical_offsets: &mut [u32]) -> Result<Vec<AnnotationData>, Error> {
     // Create ContinuingMultiline data for the continuing vertical bars at the start.
-    let mut data = continuing_annotations.iter().take(continuing_take_index)
+    let mut data = continuing_annotations.iter().take(continuing_end_index)
         .fold(Vec::new(), |mut acc, a| {
             acc.push(AnnotationData::ContinuingMultiline(ContinuingMultilineAnnotationData {
                 style: a.style,
@@ -501,11 +430,12 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, fil
                 if offset == vertical_index {
                     // If this is the line this annotation should connect with its
                     // continuing vertical bar, add the connection line
+                    eprintln!("adding connection; continuing annotations: {}, continuing end index: {}, additional continuing: {}", continuing_annotations.len(), continuing_end_index, additional_continuing_indices.len());
                     acc.push(AnnotationData::ConnectingMultiline(ConnectingMultilineAnnotationData {
                         style: annotation.style,
                         severity: diagnostic.severity,
                         end_location: start.location.clone(),
-                        vertical_bar_index: continuing_annotations.len() - continuing_take_index + additional_continuing_indices.len(),
+                        vertical_bar_index: continuing_end_index + additional_continuing_indices.len(),
                     }));
                     additional_continuing_indices.push(i);
 
@@ -534,7 +464,7 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, fil
                         style: annotation.style,
                         severity: diagnostic.severity,
                         end_location: end.location.clone(),
-                        vertical_bar_index: continuing_annotations.len() - continuing_take_index + additional_continuing_indices.len(),
+                        vertical_bar_index: continuing_annotations.len() - continuing_end_index + additional_continuing_indices.len(),
                     }));
                     additional_continuing_indices.push(i);
                 }
@@ -649,7 +579,7 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, fil
             data.push(AnnotationData::Label(LabelAnnotationLineData {
                 style: a.style,
                 severity: diagnostic.severity,
-                location: LineColumn::new(line_index, label_pos + 2),
+                location: LineColumn::new(line_index, label_pos + 1),
                 label: a.label.clone(),
             }));
         }

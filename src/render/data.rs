@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Formatter};
 use crate::diagnostic::{AnnotationStyle, Severity};
 use crate::render::LineColumn;
 
@@ -117,7 +118,7 @@ pub enum StartEndAnnotationData {
 }
 
 /// An enum for the different types of annotation data.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum AnnotationData {
     ContinuingMultiline(ContinuingMultilineAnnotationData),
     ConnectingMultiline(ConnectingMultilineAnnotationData),
@@ -126,4 +127,33 @@ pub enum AnnotationData {
     End(EndAnnotationLineData),
     Hanging(HangingAnnotationLineData),
     Label(LabelAnnotationLineData),
+}
+
+impl AnnotationData {
+    pub fn column_index(&self) -> usize {
+        match self {
+            // doesn't have position information, but it's always at the beginning
+            AnnotationData::ContinuingMultiline(_) => 0,
+            AnnotationData::ConnectingMultiline(data) => data.end_location.column_index,
+            AnnotationData::Start(data) => data.location.column_index,
+            AnnotationData::ConnectingSingleline(data) => data.start_column_index,
+            AnnotationData::End(data) => data.location.column_index,
+            AnnotationData::Hanging(data) => data.location.column_index,
+            AnnotationData::Label(data) => data.location.column_index,
+        }
+    }
+}
+
+impl Debug for AnnotationData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AnnotationData::ContinuingMultiline(data) => data.fmt(f),
+            AnnotationData::ConnectingMultiline(data) => data.fmt(f),
+            AnnotationData::Start(data) => data.fmt(f),
+            AnnotationData::ConnectingSingleline(data) => data.fmt(f),
+            AnnotationData::End(data) => data.fmt(f),
+            AnnotationData::Hanging(data) => data.fmt(f),
+            AnnotationData::Label(data) => data.fmt(f),
+        }
+    }
 }

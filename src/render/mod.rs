@@ -24,7 +24,7 @@ type Result = std::result::Result<(), Error>;
 ///
 /// It is not necessarily checked that this position exists
 /// in the source file.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LineColumn {
     /// The `0`-indexed line index.
     pub line_index: usize,
@@ -357,11 +357,7 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
     }
 
     fn get_start_print_line(&self, line_index: usize) -> usize {
-        if self.config.surrounding_lines > line_index {
-            0
-        } else {
-            line_index - self.config.surrounding_lines
-        }
+        line_index.saturating_sub(self.config.surrounding_lines)
     }
 
     fn get_last_print_line(&self, file: FileId, line: usize) -> std::result::Result<usize, Error> {

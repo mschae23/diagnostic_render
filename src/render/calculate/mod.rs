@@ -363,7 +363,7 @@ fn calculate_final_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, files: &i
         }
     }
 
-    eprintln!("[debug] continuing end index: {}", continuing_end_index);
+    // eprintln!("[debug] continuing end index: {}", continuing_end_index);
 
     // the last vertical index; can be used to estimate how many lines are needed for
     // displaying the annotations.
@@ -371,8 +371,11 @@ fn calculate_final_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, files: &i
     let _final_vertical_index = vertical_offsets_sorted.last().map(|(_, offset)| *offset).unwrap_or(1);
 
     let mut additional_continuing_indices = Vec::new(); // controlled by calculate_single_line_data()
+    let mut already_connected = vec![false; starts_ends.len()];
 
-    let data = calculate_single_line_data(diagnostic, files, file, line_index, 0, continuing_annotations, &mut continuing_end_index, &mut additional_continuing_indices, &starts_ends, &mut vertical_offsets)?;
+    let data = calculate_single_line_data(diagnostic, files, file, line_index, 0,
+        continuing_annotations, &mut continuing_end_index, &mut additional_continuing_indices,
+        &starts_ends, &mut vertical_offsets, &mut already_connected)?;
 
     // At which vertical index we currently are (should correspond to vertical offset of the annotations)
     let mut vertical_index = 1; // first line after the one with the underlines
@@ -381,7 +384,7 @@ fn calculate_final_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, files: &i
     loop {
         let data = calculate_single_line_data(diagnostic, files, file, line_index, vertical_index,
             continuing_annotations, &mut continuing_end_index, &mut additional_continuing_indices,
-            starts_ends, &mut vertical_offsets)?;
+            starts_ends, &mut vertical_offsets, &mut already_connected)?;
 
         if !data.iter().any(|a| match a {
             AnnotationData::ContinuingMultiline(_) => false,
@@ -403,7 +406,7 @@ fn calculate_final_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, files: &i
     //     }
     // }
 
-    eprintln!("Last vertical index: {}", vertical_index);
+    // eprintln!("[debug] Last vertical index: {}", vertical_index);
 
     // Sort by start column index.
     // The code above sometimes inserts things in the wrong order, like single-line
@@ -411,7 +414,7 @@ fn calculate_final_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, files: &i
     // However, for intersecting annotations, the Start data of one has to appear before
     // the End data of the last for rendering this properly.
     for data in final_data.iter_mut() {
-        data.sort_by(|a, b| a.column_index().cmp(&b.column_index()));
+        data.sort_by(|a, b| a.start_column_index().cmp(&b.start_column_index()));
     }
 
     Ok(final_data)
@@ -422,7 +425,8 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
                                             continuing_annotations: &[&Annotation<FileId>], continuing_end_index: &mut usize,
                                             additional_continuing_indices: &mut Vec<usize>,
                                             starts_ends: &[(&Annotation<FileId>, StartEndAnnotationData)],
-                                            vertical_offsets: &mut [u32]) -> Result<Vec<AnnotationData>, Error> {
+                                            vertical_offsets: &mut [u32],
+                                            already_connected: &mut [bool]) -> Result<Vec<AnnotationData>, Error> {
     // Create ContinuingMultiline data for the continuing vertical bars at the start.
     let mut data = continuing_annotations.iter().take(*continuing_end_index)
         .fold(Vec::new(), |mut acc, a| {
@@ -444,26 +448,54 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
         }));
     }
 
-    // TODO Is this needed at all? There's code later that does this too
-    // // Add a ConnectingMultiline element if needed (if there is an ending multi-line annotation with vertical offset == 0)
-    // // this is the horizontal "_____" line running from the continuing vertical bar to the location
-    // // that the annotations ends at
-    // if let Some((i, _)) = vertical_offsets.iter().enumerate().find(|(i, &offset)| offset == vertical_index && match starts_ends[*i].1 {
-    //     StartEndAnnotationData::End(_) => true,
-    //     StartEndAnnotationData::Start(_) | StartEndAnnotationData::Both(_, _) => false,
-    // }) {
-    //     let a = starts_ends[i].0;
-    //
-    //     data.push(AnnotationData::ConnectingMultiline(ConnectingMultilineAnnotationData {
-    //         style: a.style,
-    //         severity: diagnostic.severity,
-    //         end_location: LineColumn::new(line_index, a.range.end - files.line_range(file, line_index)?.start),
-    //         // All elements in data so far are ContinuingMultiline, so this one must connect to the last one
-    //         vertical_bar_index: continuing_end_index + additional_continuing_indices.len(),
-    //     }))
-    // }
+    {
+        let mut push_down_end = None;
 
-    let mut push_down_end = None;
+        for (i, &offset) in vertical_offsets.iter().enumerate() {
+            let (_, start_end) = &starts_ends[i];
+
+            if match start_end {
+                StartEndAnnotationData::Start(_) | StartEndAnnotationData::End(_) => true,
+                StartEndAnnotationData::Both(_, _) => false,
+            } && offset == vertical_index && !already_connected[i] {
+                push_down_end = Some((i, vertical_index));
+            }
+        }
+
+        if let Some((i, to_offset)) = push_down_end {
+            let mut next_vertical_offset = to_offset + 1;
+            let column_index = match &starts_ends[i].1 {
+                StartEndAnnotationData::Start(start) => start.location.column_index,
+                StartEndAnnotationData::End(end) => end.location.column_index,
+                StartEndAnnotationData::Both(start, _) => start.location.column_index,
+            };
+
+            for (j, offset) in vertical_offsets.iter_mut().enumerate().rev() {
+                if i == j {
+                    continue;
+                }
+
+                // eprintln!("[debug] pushing down {}, initiated from {} (from {} to {})", j, i, *offset, to_offset);
+
+                let (a, start_end) = &starts_ends[j];
+
+                let end_column_index = match start_end {
+                    // end and both, which should be below start, need to be moved down
+                    StartEndAnnotationData::End(end) | StartEndAnnotationData::Both(_, end) => end.location.column_index,
+                    // don't affect starting annotations
+                    StartEndAnnotationData::Start(_) => continue,
+                };
+
+                if *offset < to_offset && end_column_index <= column_index && !a.label.is_empty() {
+                    // It can't be equal, because we would have a starting annotation then
+                    assert_ne!(*offset, to_offset);
+
+                    *offset = next_vertical_offset;
+                    next_vertical_offset += 1;
+                }
+            }
+        }
+    }
 
     // This does different things depending on the vertical_index:
     // If vertical_index is 0:
@@ -477,10 +509,11 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
 
         match start_end {
             StartEndAnnotationData::Start(start) => {
-                if offset == vertical_index {
+                if offset == vertical_index && !already_connected[i] {
+                    // eprintln!("[debug] adding connection; continuing annotations: {}, continuing end index: {}, additional continuing: {}", continuing_annotations.len(), continuing_end_index, additional_continuing_indices.len());
+
                     // If this is the line this annotation should connect with its
                     // continuing vertical bar, add the connection line
-                    eprintln!("[debug] adding connection; continuing annotations: {}, continuing end index: {}, additional continuing: {}", continuing_annotations.len(), continuing_end_index, additional_continuing_indices.len());
                     acc.push(AnnotationData::ConnectingMultiline(ConnectingMultilineAnnotationData {
                         style: annotation.style,
                         severity: diagnostic.severity,
@@ -488,8 +521,9 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
                         vertical_bar_index: *continuing_end_index + additional_continuing_indices.len(),
                     }));
                     additional_continuing_indices.push(i);
+                    already_connected[i] = true;
 
-                    push_down_end = Some(vertical_index);
+                    // push_down_end = Some((i, vertical_index));
                 }
 
                 if vertical_index == 0 {
@@ -497,6 +531,8 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
                     // either in this line or on a later one (with hanging elements ("|") in between)
                     acc.push(AnnotationData::Start(start.clone()));
                 } else if offset >= vertical_index {
+                    // eprintln!("[debug] adding hanging data; i: {}, vertical index: {}, offset: {} (start)", i, vertical_index, offset);
+
                     // If vertical_index is not at offset yet, and we're not on the line that
                     // should have the boundary marker, add a "|" character
                     acc.push(AnnotationData::Hanging(HangingAnnotationLineData {
@@ -507,7 +543,7 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
                 }
             },
             StartEndAnnotationData::End(end) => {
-                if offset == vertical_index {
+                if offset == vertical_index && !already_connected[i] {
                     // If this is the line this annotation should connect with its
                     // continuing vertical bar, add the connection line
                     // acc.push(AnnotationData::ContinuingMultiline(ContinuingMultilineAnnotationData {
@@ -522,13 +558,20 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
                         vertical_bar_index: *continuing_end_index + additional_continuing_indices.len() - 1,
                     }));
                     *continuing_end_index -= 1;
+                    already_connected[i] = true;
+
+                    // push_down_end = Some((i, vertical_index));
+                }
+
+                if vertical_index == 1 && offset == 2 {
+                    // eprintln!("[debug] Ending annotation with vertical index 1 and offset 2");
                 }
 
                 if vertical_index == 0 {
                     acc.push(AnnotationData::End(end.clone()));
                 } else {
                     if offset != 0 && offset + 1 == vertical_index && !annotation.label.is_empty() {
-                        eprintln!("[debug] adding label at index {} for offset {} (end)", vertical_index, offset);
+                        // eprintln!("[debug] adding label at index {} for offset {} (end)", vertical_index, offset);
 
                         // If we're just under the continuing line and this annotation has a label, add it.
                         // Note: further starting annotations are able to push vertical_offset further down.
@@ -539,6 +582,8 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
                             label: annotation.label.clone(),
                         }));
                     } else if offset >= vertical_index {
+                        // eprintln!("[debug] adding hanging data; i: {}, vertical index: {}, offset: {} (end)", i, vertical_index, offset);
+
                         // If vertical_index is not at offset yet, and we're not on the line that
                         // should have the boundary marker, add a "|" character
                         acc.push(AnnotationData::Hanging(HangingAnnotationLineData {
@@ -568,7 +613,7 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
                     acc.push(AnnotationData::End(end.clone()));
                 } else {
                     if offset != 0 && offset + 1 == vertical_index && !annotation.label.is_empty() {
-                        eprintln!("[debug] adding label at index {} for offset {} (both)", vertical_index, offset);
+                        // eprintln!("[debug] adding label at index {} for offset {} (both)", vertical_index, offset);
 
                         // If we're under the hanging elements ("|") and this annotation has a label, add it.
                         //
@@ -581,6 +626,8 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
                             label: annotation.label.clone(),
                         }));
                     } else if offset >= vertical_index {
+                        // eprintln!("[debug] adding hanging data; i: {}, vertical index: {}, offset: {} (both)", i, vertical_index, offset);
+
                         // If vertical_index is not at offset yet, and we're not on the line that
                         // should have the boundary marker, add a "|" character
                         acc.push(AnnotationData::Hanging(HangingAnnotationLineData {
@@ -595,29 +642,6 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
 
         acc
     });
-
-    if let Some(to_offset) = push_down_end {
-        let mut next_vertical_offset = to_offset + 2;
-
-        for (i, offset) in vertical_offsets.iter_mut().enumerate() {
-            let (a, start_end) = &starts_ends[i];
-
-            match start_end {
-                // end and both, which should be below start, need to be moved down
-                StartEndAnnotationData::End(_) | StartEndAnnotationData::Both(_, _) => {},
-                // don't affect starting annotations
-                StartEndAnnotationData::Start(_) => continue,
-            }
-
-            if *offset <= to_offset && !a.label.is_empty() {
-                // It can't be equal, because we would have a starting annotation then
-                assert_ne!(*offset, to_offset);
-
-                *offset = next_vertical_offset;
-                next_vertical_offset += 1;
-            }
-        }
-    }
 
     // TODO Hasn't been adjusted to the code being moved into a function
     //      that also runs on vertical indices > 0

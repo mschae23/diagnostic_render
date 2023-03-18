@@ -130,11 +130,15 @@ pub enum AnnotationData {
 }
 
 impl AnnotationData {
-    pub fn column_index(&self) -> usize {
+    pub fn start_column_index(&self) -> usize {
         match self {
-            // doesn't have position information, but it's always at the beginning
+            // Doesn't have position information, but it's always at the beginning
             AnnotationData::ContinuingMultiline(_) => 0,
-            AnnotationData::ConnectingMultiline(data) => data.end_location.column_index,
+            // Has a position, but it's the end, and we need the start for this method.
+            // This relies on the caller of this method not using sort_unstable on this
+            // (currently, it's used to sort the data at the end)
+            AnnotationData::ConnectingMultiline(_) => 0,
+            // Data with actual position information
             AnnotationData::Start(data) => data.location.column_index,
             AnnotationData::ConnectingSingleline(data) => data.start_column_index,
             AnnotationData::End(data) => data.location.column_index,

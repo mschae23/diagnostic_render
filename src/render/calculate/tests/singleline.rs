@@ -43,7 +43,7 @@ fn test_1() {
 
 #[test]
 fn test_separate_lines_1() {
-    let file = SimpleFile::new("test_file.test", "let main = 23;\nsomething += 3.0;\nprint(example_source();\n");
+    let file = SimpleFile::new("test_file.test", "let main = 23;\nsomething += 3.0;\nprint(example_source);\n");
     let diagnostic: Diagnostic<()> = Diagnostic::new(Severity::Error);
 
     let annotation1 = Annotation::new(AnnotationStyle::Primary, (), 3..13)
@@ -113,7 +113,7 @@ fn test_separate_lines_1() {
 
 #[test]
 fn test_same_line_1() {
-    let file = SimpleFile::new("test_file.test", "let main = 23;\nsomething += 3.0;\nprint(example_source();\n");
+    let file = SimpleFile::new("test_file.test", "let main = 23;\nsomething += 3.0;\nprint(example_source);\n");
     let diagnostic: Diagnostic<()> = Diagnostic::new(Severity::Error);
 
     let annotation1 = Annotation::new(AnnotationStyle::Primary, (), 11..13)
@@ -192,7 +192,7 @@ fn test_same_line_1() {
 
 #[test]
 fn test_overlapping_1() {
-    let file = SimpleFile::new("test_file.test", "let main = 23;\nsomething += 3.0;\nprint(example_source();\n");
+    let file = SimpleFile::new("test_file.test", "let main = 23;\nsomething += 3.0;\nprint(example_source);\n");
     let diagnostic: Diagnostic<()> = Diagnostic::new(Severity::Error);
 
     let annotation1 = Annotation::new(AnnotationStyle::Primary, (), 4..13)

@@ -83,6 +83,28 @@ fn calculate_vertical_offsets<FileId: Copy + Debug>(starts_ends: &[(&Annotation<
     let mut next_vertical_offset: u32 = 0;
     let mut processed = vec![false; starts_ends.len()];
 
+    // Starting annotations need to come before single-line, but after ending annotations.
+    // However, assigning vertical offsets in that order would also be incorrect, as
+    // single-line annotations need to get smaller vertical offsets than ending annotations.
+    //
+    // Instead, we just calculate a static offset here, which is equal to the number of starting
+    // annotations on this line.
+    // This only gets applied if the rightmost annotation is a single-line one (in the
+    // code iterating through starts_ends for "Both" start / end data).
+    let static_offset_from_start: u32 = starts_ends.iter().enumerate().fold(0, |acc, (_, (_, start_end))| match start_end {
+        StartEndAnnotationData::Start(_) => acc + 1,
+        StartEndAnnotationData::End(_) => acc,
+        StartEndAnnotationData::Both(_, _) => acc,
+    });
+    // Used for asserting that we aren't assigning vertical offsets to starting annotations
+    // that have already been used for other ones.
+    //
+    // We can't just compare the vertical offset currently being assigned to "next_vertical_offset"
+    // in the code where this is used, as it is both valid for it to be smaller and bigger than that.
+    let mut end_offset_for_start = 0;
+
+    // eprintln!("[debug] static_offset_from_start: {}", static_offset_from_start);
+
     // Process the single-line annotations (with start / end data "both")
     //
     // For this, the start / end data vector is iterated in reverse and given incrementing
@@ -144,6 +166,11 @@ fn calculate_vertical_offsets<FileId: Copy + Debug>(starts_ends: &[(&Annotation<
                             break;
                         }
                     }
+
+                    // Apply the static offset to give space for starting annotations
+                    // at the beginning
+                    end_offset_for_start = next_vertical_offset + static_offset_from_start;
+                    next_vertical_offset += static_offset_from_start;
                 }
 
                 vertical_offsets[i] = next_vertical_offset;
@@ -220,6 +247,19 @@ fn calculate_vertical_offsets<FileId: Copy + Debug>(starts_ends: &[(&Annotation<
         }
     }
 
+    // Starting annotations use a different "next_vertical_offset" variable
+    // because they need to use the space given to them by the static offset applied above.
+    let mut next_start_vertical_offset = if next_vertical_offset > 0 { 1 } else { 0 };
+
+    if next_start_vertical_offset >= next_vertical_offset {
+        // If this starting annotation would've gotten the regular
+        // next vertical offset anyway, adjust end offset to ensure
+        // we don't panic due to the assertion
+
+        // eprintln!("[debug] resetting end offset for start");
+        end_offset_for_start = u32::MAX;
+    }
+
     // Iterate through starts_ends again, for the multi-line starting annotations.
     // Vertical offsets are assigned incrementing vertical offsets in their order
     // from left to right (which matches the above assumption that annotations with
@@ -249,8 +289,11 @@ fn calculate_vertical_offsets<FileId: Copy + Debug>(starts_ends: &[(&Annotation<
     for (i, (_, start_end)) in starts_ends.iter().enumerate() {
         match start_end {
             StartEndAnnotationData::Start(_) => {
-                vertical_offsets[i] = next_vertical_offset;
-                next_vertical_offset += 1;
+                assert!(next_start_vertical_offset < end_offset_for_start, "assertion failed: next_start_vertical_offset < end_offset_for_start\n\
+                next_start_vertical_offset: {}, end_offset_for_start: {}, static_offset_from_start: {}", next_start_vertical_offset, end_offset_for_start, static_offset_from_start);
+
+                vertical_offsets[i] = next_start_vertical_offset;
+                next_start_vertical_offset += 1;
                 processed[i] = true;
             },
             StartEndAnnotationData::Both(_, _) => continue,
@@ -371,7 +414,7 @@ fn calculate_final_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, files: &i
             data.push(AnnotationData::Label(LabelAnnotationLineData {
                 style: a.style,
                 severity: diagnostic.severity,
-                location: LineColumn::new(line_index, label_pos + 2),
+                location: LineColumn::new(line_index, label_pos + 1),
                 label: a.label.clone(),
             }));
         }

@@ -172,18 +172,18 @@ mod ending {
 
         let starts_ends = vec![
             (&annotation2, StartEndAnnotationData::End(EndAnnotationLineData {
-                style: AnnotationStyle::Primary,
+                style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
                 location: LineColumn::new(1, 4),
             })),
             (&annotation1, StartEndAnnotationData::End(EndAnnotationLineData {
-                style: AnnotationStyle::Secondary,
+                style: AnnotationStyle::Primary,
                 severity: Severity::Error,
                 location: LineColumn::new(1, 13),
             })),
         ];
 
-        assert_eq!(calculate_vertical_offsets(&starts_ends).unwrap(), vec![1, 0]);
+        assert_eq!(calculate_vertical_offsets(&starts_ends).unwrap(), vec![0, 1]);
     }
 
     #[test]

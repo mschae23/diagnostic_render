@@ -73,8 +73,10 @@ fn test_2() {
     //   |  ___^   ^
     //   | |  _____|
     // 2 | | | something += 3.0;
-    //   | | |_____^        ^ // vertical offset 0
-    //   | |________________| // vertical offset 1
+    //   | | |_____^        ^         // vertical offset 0
+    //   | |_______|________|         // vertical offset 1
+    //   |         |        something // vertical offset 2
+    //   |         something else     // vertical offset 3
 
     assert_eq!(calculate(&diagnostic, &file, (), 0, &[&annotation1, &annotation2], &[&annotation1, &annotation2]).unwrap(), vec![
         vec![
@@ -115,8 +117,7 @@ fn test_2() {
         ],
     ]);
 
-    // TODO label for secondary annotation, which has to intersect with the connecting line for the primary annotation
-    assert_eq!(calculate(&diagnostic, &file, (), 1, &[&annotation1, &annotation2], &[&annotation1, &annotation2]).unwrap(), vec![
+    assert_eq!(calculate(&diagnostic, &file, (), 1, &[&annotation2, &annotation1], &[&annotation1, &annotation2]).unwrap(), vec![
         vec![
             AnnotationData::ContinuingMultiline(ContinuingMultilineAnnotationData {
                 style: AnnotationStyle::Primary,
@@ -144,12 +145,6 @@ fn test_2() {
                 severity: Severity::Error,
                 location: LineColumn::new(1, 13),
             }),
-            AnnotationData::Label(LabelAnnotationLineData {
-                style: AnnotationStyle::Primary,
-                severity: Severity::Error,
-                location: LineColumn::new(1, 14),
-                label: String::from("something"),
-            }),
         ],
         vec![
             AnnotationData::ContinuingMultiline(ContinuingMultilineAnnotationData {
@@ -164,9 +159,35 @@ fn test_2() {
                 vertical_bar_index: 0,
             }),
             AnnotationData::Hanging(HangingAnnotationLineData {
+                style: AnnotationStyle::Secondary,
+                severity: Severity::Error,
+                location: LineColumn::new(1, 4),
+            }),
+            AnnotationData::Hanging(HangingAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
                 location: LineColumn::new(1, 13),
+            }),
+        ],
+        vec![
+            AnnotationData::Hanging(HangingAnnotationLineData {
+                style: AnnotationStyle::Secondary,
+                severity: Severity::Error,
+                location: LineColumn::new(1, 4),
+            }),
+            AnnotationData::Label(LabelAnnotationLineData {
+                style: AnnotationStyle::Primary,
+                severity: Severity::Error,
+                location: LineColumn::new(1, 13),
+                label: String::from("something"),
+            }),
+        ],
+        vec![
+            AnnotationData::Label(LabelAnnotationLineData {
+                style: AnnotationStyle::Secondary,
+                severity: Severity::Error,
+                location: LineColumn::new(1, 4),
+                label: String::from("something else"),
             }),
         ],
     ]);

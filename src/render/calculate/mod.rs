@@ -449,21 +449,36 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
     }
 
     {
-        let mut push_down_end = None;
+        // Annotations starting or ending on a line need to be able to
+        // move the labels for other annotations on that line further
+        // down if they are before them, as it would otherwise be possible
+        // for them to intersect.
+        let mut move_down = None;
 
         for (i, &offset) in vertical_offsets.iter().enumerate() {
             let (_, start_end) = &starts_ends[i];
 
+            // This is the same condition as the main iteration below.
+            //
+            // In a previous version of this, move_down was set to
+            // the right value there and the vertical offset values would
+            // be changed after the loop.
+            // However, this meant it was possible for a Hanging data to get
+            // skipped as the annotation that was moved down had already not
+            // added it before it was modified. This is why this has to be done
+            // before that loop.
             if match start_end {
                 StartEndAnnotationData::Start(_) | StartEndAnnotationData::End(_) => true,
                 StartEndAnnotationData::Both(_, _) => false,
             } && offset == vertical_index && !already_connected[i] {
-                push_down_end = Some((i, vertical_index));
+                move_down = Some((i, vertical_index));
             }
         }
 
-        if let Some((i, to_offset)) = push_down_end {
+        // Apply move_down.
+        if let Some((i, to_offset)) = move_down {
             let mut next_vertical_offset = to_offset + 1;
+
             let column_index = match &starts_ends[i].1 {
                 StartEndAnnotationData::Start(start) => start.location.column_index,
                 StartEndAnnotationData::End(end) => end.location.column_index,
@@ -472,10 +487,11 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
 
             for (j, offset) in vertical_offsets.iter_mut().enumerate().rev() {
                 if i == j {
+                    // Don't change the annotation that caused this in the first place.
                     continue;
                 }
 
-                // eprintln!("[debug] pushing down {}, initiated from {} (from {} to {})", j, i, *offset, to_offset);
+                // eprintln!("[debug] moving down {}, initiated from {} (from {} to {})", j, i, *offset, to_offset);
 
                 let (a, start_end) = &starts_ends[j];
 
@@ -486,6 +502,10 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
                     StartEndAnnotationData::Start(_) => continue,
                 };
 
+                // Only affect annotations which have a lower vertical offset than the one
+                // which caused this and are also further on the left of the line.
+                // Also, if this annotation doesn't have a label, it needs no space to display
+                // it, so this doesn't need to happen.
                 if *offset < to_offset && end_column_index <= column_index && !a.label.is_empty() {
                     // It can't be equal, because we would have a starting annotation then
                     assert_ne!(*offset, to_offset);
@@ -616,9 +636,6 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
                         // eprintln!("[debug] adding label at index {} for offset {} (both)", vertical_index, offset);
 
                         // If we're under the hanging elements ("|") and this annotation has a label, add it.
-                        //
-                        // TODO intersecting lines with further starting annotations
-                        //      should be able to push this further down (add an additional vertical offset)
                         acc.push(AnnotationData::Label(LabelAnnotationLineData {
                             style: annotation.style,
                             severity: diagnostic.severity,
@@ -643,9 +660,8 @@ fn calculate_single_line_data<FileId: Copy>(diagnostic: &Diagnostic<FileId>, _fi
         acc
     });
 
-    // TODO Hasn't been adjusted to the code being moved into a function
-    //      that also runs on vertical indices > 0
-    // Actually, maybe this just works anyway
+    // If we're on vertical index 0 (which has the underlines) and the last annotation
+    // has vertical offset 0, add its label if it has one.
     if vertical_index == 0 && vertical_offsets[starts_ends.len() - 1] == 0 {
         let (a, start_end) = &starts_ends[starts_ends.len() - 1];
 

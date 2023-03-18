@@ -9,6 +9,4 @@ mod singleline;
 mod ending;
 mod starting;
 
-// TODO more tests, see examples in the comments of calculate()
-
 mod vertical_offset;

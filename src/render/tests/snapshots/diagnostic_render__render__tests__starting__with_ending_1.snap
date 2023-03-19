@@ -1,0 +1,16 @@
+---
+source: src/render/tests/starting.rs
+expression: result
+---
+error: Some message
+ --> test_file.test:2:14
+1 |   let main = 23;
+  |  ____________-
+2 | | something += 3.0;
+  | |_________-    ^
+  |  _________|____|
+  | |         |
+  | |         something else
+3 | | print(example_source);
+  | |_____^ something
+

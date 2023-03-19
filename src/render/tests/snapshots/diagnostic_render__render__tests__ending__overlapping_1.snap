@@ -1,0 +1,15 @@
+---
+source: src/render/tests/ending.rs
+expression: result
+---
+error[E002]: Some message
+ --> test_file.test:1:1
+1 |     let main = 23;
+  |  ___^   -
+  | |  _____|
+2 | | | something += 3.0;
+  | | |    ^           -
+  | | |____|___________|
+  | |______|           something else
+  |        something
+

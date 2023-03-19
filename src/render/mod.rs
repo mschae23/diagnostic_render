@@ -5,6 +5,7 @@ use termcolor::WriteColor;
 use crate::diagnostic::{Annotation, AnnotationStyle, Diagnostic};
 use crate::file::{Error, Files};
 use crate::render::color::ColorConfig;
+use crate::render::data::AnnotationData;
 
 pub mod color;
 
@@ -110,11 +111,12 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
             let (file, last_annotated_line_byte_offset) = diagnostic.annotations.iter()
                 .map(|a| (a.file_id, a.range.end)).max_by(|(_, a), (_, b)| a.cmp(b))
                 .expect("No annotations in diagnostic despite previous check");
-            let last_annotated_line = self.files.line_index(file, last_annotated_line_byte_offset)?;
+            let last_annotated_line_index = self.files.line_index(file, last_annotated_line_byte_offset)?;
+            let last_printed_line_index = last_annotated_line_index + self.config.surrounding_lines;
+            let last_printed_line_number = self.files.line_number(file, last_printed_line_index)?;
 
-            let last_printed_line = last_annotated_line + self.config.surrounding_lines;
-
-            self.line_digits = last_printed_line.ilog10() + 1;
+            // eprintln!("[debug] Last printed line: {}", last_printed_line_number);
+            self.line_digits = last_printed_line_number.ilog10() + 1;
 
             let annotations = diagnostic.annotations.drain(0..diagnostic.annotations.len())
                 .fold(BTreeMap::<F::FileId, Vec<Annotation<F::FileId>>>::new(), |mut acc, a| {
@@ -186,28 +188,52 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
 
         // Sort by start byte index
         annotations.sort_unstable_by(|a, b| a.range.start.cmp(&b.range.start));
-        self.render_lines_with_annotations(diagnostic, file, annotations)?;
 
+        {
+            let mut max_nested_blocks = 0;
+            let mut current_nested_blocks: Vec<usize> = Vec::new();
+
+            for annotation in annotations.iter() {
+                let start_line_index = self.files.line_index(file, annotation.range.start)?;
+                let end_line_index = self.files.line_index(file, annotation.range.end)?;
+
+                if start_line_index == end_line_index {
+                    continue;
+                }
+
+                current_nested_blocks.retain(|&a_end| a_end > start_line_index);
+                current_nested_blocks.push(end_line_index);
+                max_nested_blocks = max_nested_blocks.max(current_nested_blocks.len());
+            }
+
+            self.max_nested_blocks = max_nested_blocks;
+        }
+
+        self.render_lines_with_annotations(diagnostic, file, annotations)?;
         Ok(())
     }
 
     fn render_lines_with_annotations(&mut self, diagnostic: &Diagnostic<FileId>, file: FileId, annotations: Vec<Annotation<FileId>>) -> Result {
-        let mut already_printed_to = 0;
+        let mut already_printed_end_index = 0;
         let mut annotations_on_line_indices = Vec::new();
         let mut continuing_annotations_indices = Vec::new();
         let mut current_line_index = 0;
         let mut last_line_index = None;
         let mut min_index = 0;
+        let mut first_iteration = true;
 
         let last_line_index_in_file = self.files.line_index(file, self.files.source(file)?.len() - 1)?;
 
         loop {
-            current_line_index = match annotations.iter().skip(min_index).next() {
+            current_line_index = match annotations.get(min_index) {
                 None => break,
-                Some(annotation) => (current_line_index + 1).max(self.files.line_index(file, annotation.range.start)?),
+                Some(annotation) => if first_iteration { current_line_index } else {current_line_index + 1}
+                    .max(self.files.line_index(file, annotation.range.start)?),
             };
 
-            if current_line_index as usize > last_line_index_in_file {
+            // eprintln!("[debug] Current line index: {}", current_line_index);
+
+            if current_line_index > last_line_index_in_file {
                 break;
             }
 
@@ -222,31 +248,35 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
                     continue;
                 }
 
-                if start_line_index == current_line_index || end_line_index== current_line_index {
+                if start_line_index == current_line_index || end_line_index == current_line_index {
                     annotations_on_line_indices.push(i);
+
+                    if start_line_index < current_line_index {
+                        // If it started before this line, it should be in both vectors
+                        continuing_annotations_indices.push(i);
+                    }
                 } else if start_line_index < current_line_index && end_line_index >= current_line_index {
                     continuing_annotations_indices.push(i);
                 }
             }
 
-            if current_line_index != 0 && !annotations_on_line_indices.is_empty() {
-                // Different way to render things is used here, not sure if this is needed
-                // self.fix_connecting_annotations(current_line_index, &mut annotations, &annotations_on_line_indices);
-
+            if /* current_line_index != 0 && */ !annotations_on_line_indices.is_empty() {
                 self.render_part_lines(diagnostic, file, current_line_index, last_line_index,
                     annotations_on_line_indices.iter().map(|i| &annotations[*i]).collect::<Vec<_>>(),
                     continuing_annotations_indices.iter().map(|i| &annotations[*i]).collect::<Vec<_>>(),
-                    &mut already_printed_to)?;
+                    &mut already_printed_end_index)?;
                 annotations_on_line_indices.clear();
                 continuing_annotations_indices.clear();
 
                 last_line_index = Some(current_line_index);
             }
+
+            first_iteration = false;
         }
 
         if let Some(last_line) = last_line_index {
-            if (last_line as usize) <= self.get_last_line_index(file)? {
-                self.render_post_surrounding_lines(diagnostic, file, self.get_last_line_index(file)? + 1, last_line, &[], &mut already_printed_to)?;
+            if last_line <= self.get_last_line_index(file)? {
+                self.render_post_surrounding_lines(diagnostic, file, self.get_last_line_index(file)? + 1, last_line, &[], &mut already_printed_end_index)?;
             }
         }
 
@@ -254,12 +284,12 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
     }
 
     fn render_post_surrounding_lines(&mut self, diagnostic: &Diagnostic<FileId>, file: FileId, main_line: usize, last_line: usize,
-                                    continuing_annotations: &[&Annotation<FileId>],
-                                    already_printed_to_line_index: &mut usize) -> Result {
+                                     continuing_annotations: &[&Annotation<FileId>],
+                                     already_printed_end_line_index: &mut usize) -> Result {
         // writeln!(f, "[debug] potentially printing post surrounding lines, last line: {}, already printed to: {}", last_line, *already_printed_to)?;
 
-        if last_line >= *already_printed_to_line_index {
-            let first_print_line = (last_line + 1).max(*already_printed_to_line_index + 1);
+        if last_line >= *already_printed_end_line_index {
+            let first_print_line = (last_line + 1).max(*already_printed_end_line_index);
             let last_print_line = self.get_last_print_line(file, last_line)?.min(main_line - 1);
 
             // writeln!(f, "[debug] printing post surrounding lines, last line: {}, first: {}, last: {}", last_line, first_print_line, last_print_line)?;
@@ -267,7 +297,7 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
             if last_print_line >= first_print_line {
                 for line in first_print_line..=last_print_line {
                     self.render_single_source_line(diagnostic, file, line, last_line, &[], continuing_annotations)?;
-                    *already_printed_to_line_index = line;
+                    *already_printed_end_line_index = line + 1;
                 }
             }
         }
@@ -275,28 +305,31 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_part_lines(&mut self, diagnostic: &Diagnostic<FileId>, file: FileId,
                          main_line_index: usize, last_line_index: Option<usize>,
-                        annotations_on_line: Vec<&Annotation<FileId>>,
-                        continuing_annotations: Vec<&Annotation<FileId>>,
-                        already_printed_to_line_index: &mut usize) -> Result {
+                         annotations_on_line: Vec<&Annotation<FileId>>,
+                         continuing_annotations: Vec<&Annotation<FileId>>,
+                         already_printed_end_line_index: &mut usize) -> Result {
+        // eprintln!("[debug] Rendering part lines (main {}, last {:?}, already printed to {})", main_line_index, last_line_index.as_ref(), *already_printed_end_line_index);
+
         if let Some(last_line) = last_line_index {
-            self.render_post_surrounding_lines(diagnostic, file, main_line_index, last_line, &continuing_annotations, already_printed_to_line_index)?;
+            self.render_post_surrounding_lines(diagnostic, file, main_line_index, last_line, &continuing_annotations, already_printed_end_line_index)?;
         }
 
-        let first_print_line_index = self.get_start_print_line(main_line_index).max(*already_printed_to_line_index + 1);
+        let first_print_line_index = self.get_start_print_line(main_line_index).max(*already_printed_end_line_index);
         let last_print_line_index = main_line_index;
 
         // writeln!(f, "[debug] current line ({}); first = {}, last = {}", main_line, first_print_line, last_print_line)?;
 
-        if first_print_line_index > *already_printed_to_line_index + 1 {
+        if first_print_line_index > *already_printed_end_line_index {
             self.write_line_number(None, "...")?;
             writeln!(self.f)?;
         }
 
         for line in first_print_line_index..=last_print_line_index {
             self.render_single_source_line(diagnostic, file, line, main_line_index, &annotations_on_line, &continuing_annotations)?;
-            *already_printed_to_line_index = line;
+            *already_printed_end_line_index = line + 1;
         }
 
         Ok(())
@@ -306,11 +339,25 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
                                  line_index: usize, main_line_index: usize,
                                  annotations: &[&Annotation<FileId>],
                                  continuing_annotations: &[&Annotation<FileId>]) -> Result {
-        self.write_line_begin(diagnostic, Some(line_index), " |", continuing_annotations)?;
+        self.write_line_begin(diagnostic, Some(self.files.line_number(file, line_index)?), " |", continuing_annotations)?;
 
-        self.colors.source(self.f)?;
-        writeln!(self.f, "{}", &self.files.source(file)?[self.files.line_range(file, line_index)?])?;
-        self.colors.reset(self.f)?;
+        let source = &self.files.source(file)?[self.files.line_range(file, line_index)?];
+
+        if !source.trim().is_empty() {
+            write!(self.f, " ")?;
+
+            self.colors.source(self.f)?;
+
+            if source.ends_with('\n') {
+                write!(self.f, "{}", source)?;
+            } else {
+                writeln!(self.f, "{}", source)?;
+            }
+
+            self.colors.reset(self.f)?;
+        } else {
+            writeln!(self.f)?;
+        }
 
         if line_index != main_line_index {
             return Ok(());
@@ -322,9 +369,217 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
     fn render_single_source_annotations(&mut self, diagnostic: &Diagnostic<FileId>, file: FileId,
                                         line_index: usize,
                                         annotations: &[&Annotation<FileId>], continuing_annotations: &[&Annotation<FileId>]) -> Result {
-        let _data = calculate::calculate(diagnostic, &self.files, file, line_index, annotations, continuing_annotations)?;
+        let data = calculate::calculate(diagnostic, &self.files, file, line_index, annotations, continuing_annotations)?;
+        let mut data_stack = Vec::new();
+        let mut stack_removal_indices = Vec::new();
 
-        // TODO
+        for line_data in data.into_iter() {
+            self.write_line_number(None, " |")?;
+
+            let mut horizontal_index = 0;
+            let mut last = false;
+
+            for data in line_data.into_iter() {
+                if last {
+                    eprintln!("Bug in error message formatter: annotation part after label");
+                }
+
+                let to_horizontal_index = match &data {
+                    AnnotationData::ContinuingMultiline(data) => data.vertical_bar_index * 2 + 1,
+                    AnnotationData::ConnectingMultiline(data) => data.vertical_bar_index * 2 + 2,
+                    AnnotationData::Start(data) => data.location.column_index + 2 * self.max_nested_blocks + 1,
+                    AnnotationData::ConnectingSingleline(data) => data.start_column_index + 2 * self.max_nested_blocks + 1,
+                    AnnotationData::End(data) => data.location.column_index + 2 * self.max_nested_blocks + 1,
+                    AnnotationData::Hanging(data) => data.location.column_index + 2 * self.max_nested_blocks + 1,
+                    AnnotationData::Label(data) => data.location.column_index + 2 * self.max_nested_blocks + 1,
+                };
+
+                if horizontal_index < to_horizontal_index {
+                    for data in data_stack.iter().rev() {
+                        self.write_annotation_data(data, Some(to_horizontal_index), &mut horizontal_index, &mut last)?;
+                    }
+
+                    for (i, data) in data_stack.iter().enumerate() {
+                        let to_horizontal_index = match &data {
+                            AnnotationData::ContinuingMultiline(data) => data.vertical_bar_index * 2 + 1,
+                            AnnotationData::ConnectingMultiline(data) => data.end_location.column_index + 2 * self.max_nested_blocks + 1,
+                            AnnotationData::Start(data) => data.location.column_index + 2 * self.max_nested_blocks + 1,
+                            AnnotationData::ConnectingSingleline(data) => data.end_column_index + 2 * self.max_nested_blocks + 1,
+                            AnnotationData::End(data) => data.location.column_index + 2 * self.max_nested_blocks + 1,
+                            AnnotationData::Hanging(data) => data.location.column_index + 2 * self.max_nested_blocks + 1,
+                            AnnotationData::Label(data) => data.location.column_index + 2 * self.max_nested_blocks + 1,
+                        };
+
+                        if to_horizontal_index < horizontal_index {
+                            stack_removal_indices.push(i);
+                        }
+                    }
+
+                    for (i, index) in stack_removal_indices.drain(0..stack_removal_indices.len()).enumerate() {
+                        data_stack.remove(index - i);
+                    }
+                }
+
+                data_stack.push(data);
+            }
+
+            for data in data_stack.iter().rev() {
+                self.write_annotation_data(data, None, &mut horizontal_index, &mut last)?;
+            }
+
+            data_stack.clear();
+            writeln!(self.f)?;
+        }
+
+        Ok(())
+    }
+
+    fn write_annotation_data(&mut self, data: &AnnotationData, to_horizontal_index: Option<usize>, horizontal_index: &mut usize, last: &mut bool) -> Result {
+        match data {
+            AnnotationData::ContinuingMultiline(data) => {
+                let start = data.vertical_bar_index * 2 + 1;
+
+                if start < *horizontal_index {
+                    return Ok(());
+                }
+
+                if start > *horizontal_index {
+                    write!(self.f, "{}", " ".repeat(start - *horizontal_index))?;
+                    *horizontal_index = start;
+                }
+
+                self.colors.annotation(self.f, data.style, data.severity)?;
+                write!(self.f, "|")?;
+                self.colors.reset(self.f)?;
+
+                *horizontal_index += 1;
+            },
+            AnnotationData::ConnectingMultiline(data) => {
+                let start = data.vertical_bar_index * 2 + 2;
+                let end = data.end_location.column_index + 2 * self.max_nested_blocks + 1;
+
+                if end < *horizontal_index {
+                    return Ok(());
+                }
+
+                if start > *horizontal_index {
+                    write!(self.f, "{}", " ".repeat(start - *horizontal_index))?;
+                    *horizontal_index = start;
+                }
+
+                let to_index = if let Some(to_horizontal_index) = to_horizontal_index {
+                    to_horizontal_index.min(end)
+                } else {
+                    end
+                };
+
+                self.colors.annotation(self.f, data.style, data.severity)?;
+                write!(self.f, "{}", "_".repeat(to_index - *horizontal_index))?;
+                self.colors.reset(self.f)?;
+
+                *horizontal_index = to_index;
+            },
+            AnnotationData::Start(data) => {
+                let start = data.location.column_index + 2 * self.max_nested_blocks + 1;
+
+                if start < *horizontal_index {
+                    return Ok(());
+                }
+
+                if start > *horizontal_index {
+                    write!(self.f, "{}", " ".repeat(start - *horizontal_index))?;
+                    *horizontal_index = start;
+                }
+
+                self.colors.annotation(self.f, data.style, data.severity)?;
+                write!(self.f, "{}", if data.style == AnnotationStyle::Primary { "^" } else { "-" })?;
+                self.colors.reset(self.f)?;
+
+                *horizontal_index += 1;
+            },
+            AnnotationData::ConnectingSingleline(data) => {
+                let start = data.start_column_index + 2 * self.max_nested_blocks + 1;
+                let end = data.end_column_index + 2 * self.max_nested_blocks + 1;
+
+                if end < *horizontal_index {
+                    return Ok(());
+                }
+
+                if start > *horizontal_index {
+                    write!(self.f, "{}", " ".repeat(start - *horizontal_index))?;
+                    *horizontal_index = start;
+                }
+
+                let to_index = if let Some(to_horizontal_index) = to_horizontal_index {
+                    to_horizontal_index.min(end)
+                } else {
+                    end
+                };
+
+                self.colors.annotation(self.f, data.style, data.severity)?;
+                write!(self.f, "{}", if data.as_multiline { "_" } else if data.style == AnnotationStyle::Primary { "^" } else { "-" }
+                    .repeat(to_index - *horizontal_index))?;
+                self.colors.reset(self.f)?;
+
+                *horizontal_index = to_index;
+            },
+            AnnotationData::End(data) => {
+                let start = data.location.column_index + 2 * self.max_nested_blocks + 1;
+
+                if start < *horizontal_index {
+                    return Ok(());
+                }
+
+                if start > *horizontal_index {
+                    write!(self.f, "{}", " ".repeat(start - *horizontal_index))?;
+                    *horizontal_index = start;
+                }
+
+                self.colors.annotation(self.f, data.style, data.severity)?;
+                write!(self.f, "{}", if data.style == AnnotationStyle::Primary { "^" } else { "-" })?;
+                self.colors.reset(self.f)?;
+
+                *horizontal_index += 1;
+            },
+            AnnotationData::Hanging(data) => {
+                let start = data.location.column_index + 2 * self.max_nested_blocks + 1;
+
+                if start < *horizontal_index {
+                    return Ok(());
+                }
+
+                if start > *horizontal_index {
+                    write!(self.f, "{}", " ".repeat(start - *horizontal_index))?;
+                    *horizontal_index = start;
+                }
+
+                self.colors.annotation(self.f, data.style, data.severity)?;
+                write!(self.f, "|")?;
+                self.colors.reset(self.f)?;
+
+                *horizontal_index += 1;
+            },
+            AnnotationData::Label(data) => {
+                let start = data.location.column_index + 2 * self.max_nested_blocks + 1;
+
+                if start < *horizontal_index {
+                    return Ok(());
+                }
+
+                if start > *horizontal_index {
+                    write!(self.f, "{}", " ".repeat(start - *horizontal_index))?;
+                    *horizontal_index = start;
+                }
+
+                self.colors.annotation(self.f, data.style, data.severity)?;
+                write!(self.f, "{}", &data.label)?;
+                self.colors.reset(self.f)?;
+
+                *horizontal_index += data.label.len();
+                *last = true;
+            },
+        }
+
         Ok(())
     }
 
@@ -345,14 +600,23 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
     fn write_line_begin(&mut self, diagnostic: &Diagnostic<FileId>, line: Option<usize>, separator: &str, continuing_annotations: &[&Annotation<FileId>]) -> Result {
         self.write_line_number(line, separator)?;
 
-        for annotation in continuing_annotations.iter() {
+        // eprintln!("[debug] writing line begin; line: {:?}, separator: {}, continuing: {}, max nested blocks: {}", line.as_ref(), separator.len(), continuing_annotations.len(), self.max_nested_blocks);
+
+        if separator.len() < 3 && (!continuing_annotations.is_empty() || self.max_nested_blocks > 0) {
+            write!(self.f, "{}", " ".repeat(3 - separator.len()))?;
+        }
+
+        for (i, annotation) in continuing_annotations.iter().enumerate() {
             self.colors.annotation(self.f, annotation.style, diagnostic.severity)?;
             write!(self.f, "|")?;
             self.colors.reset(self.f)?;
-            write!(self.f, " ")?;
+
+            if i < continuing_annotations.len() - 1 {
+                write!(self.f, " ")?;
+            }
         }
 
-        write!(self.f, "{:>nested_blocks$}", "", nested_blocks = 2 * (self.max_nested_blocks - continuing_annotations.len()))?;
+        write!(self.f, "{:>nested_blocks$}", "", nested_blocks = (2 * (self.max_nested_blocks - continuing_annotations.len())).saturating_sub(1))?;
         Ok(())
     }
 
@@ -365,7 +629,7 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
     }
 
     fn get_last_line_index(&self, file: FileId) -> std::result::Result<usize, Error> {
-        Ok(self.files.line_index(file, self.files.source(file)?.len() - 1)?)
+        self.files.line_index(file, self.files.source(file)?.len() - 1)
     }
 }
 

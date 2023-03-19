@@ -5,3 +5,6 @@ Cargo.lock
 # IntelliJ IDEA
 .idea/
 **.iml
+
+# Changed test snapshots
+src/**/tests/snapshots/**.new

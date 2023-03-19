@@ -1,0 +1,8 @@
+---
+source: src/render/tests/singleline.rs
+expression: result
+---
+error: Test message
+ --> test_file.test:1:6
+1 | test file contents
+  |      ^^^^ test label

@@ -1,0 +1,6 @@
+---
+source: src/render/tests/mod.rs
+expression: result
+---
+error[test/diagnostic_1]: Test message
+

@@ -40,13 +40,13 @@ fn test_simple_1() {
             AnnotationData::ConnectingMultiline(ConnectingMultilineAnnotationData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                end_location: LineColumn::new(1, 13),
+                end_location: LineColumn::new(1, 12),
                 vertical_bar_index: 0,
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 13),
+                location: LineColumn::new(1, 12),
             }),
             AnnotationData::Label(LabelAnnotationLineData {
                 style: AnnotationStyle::Primary,
@@ -90,12 +90,12 @@ fn test_1() {
                 severity: Severity::Error,
                 line_index: 0,
                 start_column_index: 4,
-                end_column_index: 8,
+                end_column_index: 7,
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(0, 8),
+                location: LineColumn::new(0, 7),
             }),
             AnnotationData::Start(StartAnnotationLineData {
                 style: AnnotationStyle::Primary,
@@ -158,13 +158,13 @@ fn test_1() {
             AnnotationData::ConnectingMultiline(ConnectingMultilineAnnotationData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                end_location: LineColumn::new(1, 13),
+                end_location: LineColumn::new(1, 12),
                 vertical_bar_index: 0,
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 13),
+                location: LineColumn::new(1, 12),
             }),
             AnnotationData::Label(LabelAnnotationLineData {
                 style: AnnotationStyle::Primary,
@@ -194,7 +194,7 @@ fn test_with_ending_1() {
     //   | |         |              // vertical offset 2
     //   | |         something else // vertical offset 3
     // 3 | | print(example_source);
-    //   | |______^ something       // vertical offset 0
+    //   | |_____^ something        // vertical offset 0
 
     // Line 1
     assert_eq!(calculate(&diagnostic, &file, (), 0, &[&annotation2], &[&annotation2]).unwrap(), vec![
@@ -223,13 +223,13 @@ fn test_with_ending_1() {
             AnnotationData::ConnectingMultiline(ConnectingMultilineAnnotationData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                end_location: LineColumn::new(1, 9),
+                end_location: LineColumn::new(1, 8),
                 vertical_bar_index: 0,
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 9),
+                location: LineColumn::new(1, 8),
             }),
             AnnotationData::Start(StartAnnotationLineData {
                 style: AnnotationStyle::Primary,
@@ -247,7 +247,7 @@ fn test_with_ending_1() {
             AnnotationData::Hanging(HangingAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 9),
+                location: LineColumn::new(1, 8),
             }),
             AnnotationData::Hanging(HangingAnnotationLineData {
                 style: AnnotationStyle::Primary,
@@ -264,7 +264,7 @@ fn test_with_ending_1() {
             AnnotationData::Hanging(HangingAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 9),
+                location: LineColumn::new(1, 8),
             }),
         ],
         vec![
@@ -276,7 +276,7 @@ fn test_with_ending_1() {
             AnnotationData::Label(LabelAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 9),
+                location: LineColumn::new(1, 8),
                 label: String::from("something else"),
             }),
         ],

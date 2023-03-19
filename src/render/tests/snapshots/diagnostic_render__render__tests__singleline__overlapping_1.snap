@@ -1,0 +1,12 @@
+---
+source: src/render/tests/singleline.rs
+expression: result
+---
+error: Mismatched types
+ --> test_file.test:1:5
+1 | let main = 23;
+  |     ^^^^---^^
+  |     |   |
+  |     |   something else
+  |     something
+

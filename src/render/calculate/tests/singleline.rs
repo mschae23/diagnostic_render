@@ -24,12 +24,12 @@ fn test_1() {
                 severity: Severity::Error,
                 line_index: 0,
                 start_column_index: 5,
-                end_column_index: 9,
+                end_column_index: 8,
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(0, 9),
+                location: LineColumn::new(0, 8),
             }),
             AnnotationData::Label(LabelAnnotationLineData {
                 style: AnnotationStyle::Primary,
@@ -67,12 +67,12 @@ fn test_separate_lines_1() {
                 style: AnnotationStyle::Primary,
                 as_multiline: false,
                 severity: Severity::Error,
-                line_index: 0, start_column_index: 3, end_column_index: 13,
+                line_index: 0, start_column_index: 3, end_column_index: 12,
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(0, 13),
+                location: LineColumn::new(0, 12),
             }),
             AnnotationData::Label(LabelAnnotationLineData {
                 style: AnnotationStyle::Primary,
@@ -94,12 +94,12 @@ fn test_separate_lines_1() {
                 style: AnnotationStyle::Secondary,
                 as_multiline: false,
                 severity: Severity::Error,
-                line_index: 1, start_column_index: 13, end_column_index: 16,
+                line_index: 1, start_column_index: 13, end_column_index: 15,
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 16),
+                location: LineColumn::new(1, 15),
             }),
             AnnotationData::Label(LabelAnnotationLineData {
                 style: AnnotationStyle::Secondary,
@@ -138,12 +138,12 @@ fn test_same_line_1() {
                 style: AnnotationStyle::Secondary,
                 as_multiline: false,
                 severity: Severity::Error,
-                line_index: 0, start_column_index: 4, end_column_index: 8,
+                line_index: 0, start_column_index: 4, end_column_index: 7,
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(0, 8),
+                location: LineColumn::new(0, 7),
             }),
             // Second underline (primary, annotation1)
             AnnotationData::Start(StartAnnotationLineData {
@@ -155,12 +155,12 @@ fn test_same_line_1() {
                 style: AnnotationStyle::Primary,
                 as_multiline: false,
                 severity: Severity::Error,
-                line_index: 0, start_column_index: 11, end_column_index: 13
+                line_index: 0, start_column_index: 11, end_column_index: 12,
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(0, 13),
+                location: LineColumn::new(0, 12),
             }),
             // Label for primary annotation (annotation1)
             AnnotationData::Label(LabelAnnotationLineData {
@@ -219,7 +219,7 @@ fn test_overlapping_1() {
                 severity: Severity::Error,
                 line_index: 0,
                 start_column_index: 4,
-                end_column_index: 13,
+                end_column_index: 12,
             }),
             AnnotationData::Start(StartAnnotationLineData {
                 style: AnnotationStyle::Secondary,
@@ -232,17 +232,17 @@ fn test_overlapping_1() {
                 severity: Severity::Error,
                 line_index: 0,
                 start_column_index: 8,
-                end_column_index: 11,
+                end_column_index: 10,
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(0, 11),
+                location: LineColumn::new(0, 10),
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(0, 13),
+                location: LineColumn::new(0, 12),
             }),
         ],
         vec![

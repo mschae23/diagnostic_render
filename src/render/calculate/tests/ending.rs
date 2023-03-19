@@ -12,7 +12,7 @@ fn test_1() {
     // 1 |   let main = 23;
     //   |  _^
     // 2 | | something += 3.0;
-    //   | |_____^ // vertical offset 0
+    //   | |____^ // vertical offset 0
 
     // Line 1
     assert_eq!(calculate(&diagnostic, &file, (), 0, &[&annotation1], &[&annotation1]).unwrap(), vec![
@@ -41,13 +41,13 @@ fn test_1() {
             AnnotationData::ConnectingMultiline(ConnectingMultilineAnnotationData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                end_location: LineColumn::new(1, 4),
+                end_location: LineColumn::new(1, 3),
                 vertical_bar_index: 0,
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 4),
+                location: LineColumn::new(1, 3),
             }),
             AnnotationData::Label(LabelAnnotationLineData {
                 style: AnnotationStyle::Primary,
@@ -64,7 +64,7 @@ fn test_2() {
     let file = SimpleFile::new("test_file.test", "let main = 23;\nsomething += 3.0;\nprint(example_source);\n");
     let diagnostic: Diagnostic<()> = Diagnostic::new(Severity::Error);
 
-    let annotation1 = Annotation::new(AnnotationStyle::Primary, (), 0..28)
+    let annotation1 = Annotation::new(AnnotationStyle::Primary, (), 0..27)
         .with_label("something");
     let annotation2 = Annotation::new(AnnotationStyle::Secondary, (), 4..19)
         .with_label("something else");
@@ -73,9 +73,9 @@ fn test_2() {
     //   |  ___^   ^
     //   | |  _____|
     // 2 | | | something += 3.0;
-    //   | | |_____^        ^         // vertical offset 0
-    //   | |_______|________|         // vertical offset 1
-    //   |         |        something // vertical offset 2
+    //   | | |_____^      ^           // vertical offset 0
+    //   | |_______|______|           // vertical offset 1
+    //   |         |      something   // vertical offset 2
     //   |         something else     // vertical offset 3
 
     assert_eq!(calculate(&diagnostic, &file, (), 0, &[&annotation1, &annotation2], &[&annotation1, &annotation2]).unwrap(), vec![
@@ -132,18 +132,18 @@ fn test_2() {
             AnnotationData::ConnectingMultiline(ConnectingMultilineAnnotationData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                end_location: LineColumn::new(1, 4),
+                end_location: LineColumn::new(1, 3),
                 vertical_bar_index: 1,
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 4),
+                location: LineColumn::new(1, 3),
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 13),
+                location: LineColumn::new(1, 11),
             }),
         ],
         vec![
@@ -155,30 +155,30 @@ fn test_2() {
             AnnotationData::ConnectingMultiline(ConnectingMultilineAnnotationData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                end_location: LineColumn::new(1, 13),
+                end_location: LineColumn::new(1, 11),
                 vertical_bar_index: 0,
             }),
             AnnotationData::Hanging(HangingAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 4),
+                location: LineColumn::new(1, 3),
             }),
             AnnotationData::Hanging(HangingAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 13),
+                location: LineColumn::new(1, 11),
             }),
         ],
         vec![
             AnnotationData::Hanging(HangingAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 4),
+                location: LineColumn::new(1, 3),
             }),
             AnnotationData::Label(LabelAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 13),
+                location: LineColumn::new(1, 11),
                 label: String::from("something"),
             }),
         ],
@@ -186,7 +186,7 @@ fn test_2() {
             AnnotationData::Label(LabelAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 4),
+                location: LineColumn::new(1, 3),
                 label: String::from("something else"),
             }),
         ],
@@ -267,12 +267,12 @@ fn test_overlapping_1() {
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 4),
+                location: LineColumn::new(1, 3),
             }),
             AnnotationData::End(EndAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 13),
+                location: LineColumn::new(1, 12),
             }),
         ],
         vec![
@@ -289,18 +289,18 @@ fn test_overlapping_1() {
             AnnotationData::ConnectingMultiline(ConnectingMultilineAnnotationData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                end_location: LineColumn::new(1, 13),
+                end_location: LineColumn::new(1, 12),
                 vertical_bar_index: 1,
             }),
             AnnotationData::Hanging(HangingAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 4),
+                location: LineColumn::new(1, 3),
             }),
             AnnotationData::Hanging(HangingAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 13),
+                location: LineColumn::new(1, 12),
             }),
         ],
         vec![
@@ -312,18 +312,18 @@ fn test_overlapping_1() {
             AnnotationData::ConnectingMultiline(ConnectingMultilineAnnotationData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                end_location: LineColumn::new(1, 4),
+                end_location: LineColumn::new(1, 3),
                 vertical_bar_index: 0,
             }),
             AnnotationData::Hanging(HangingAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 4),
+                location: LineColumn::new(1, 3),
             }),
             AnnotationData::Label(LabelAnnotationLineData {
                 style: AnnotationStyle::Secondary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 13),
+                location: LineColumn::new(1, 12),
                 label: String::from("something else"),
             }),
         ],
@@ -331,7 +331,7 @@ fn test_overlapping_1() {
             AnnotationData::Label(LabelAnnotationLineData {
                 style: AnnotationStyle::Primary,
                 severity: Severity::Error,
-                location: LineColumn::new(1, 4),
+                location: LineColumn::new(1, 3),
                 label: String::from("something"),
             }),
         ],

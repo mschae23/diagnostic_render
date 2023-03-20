@@ -288,7 +288,7 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
                                      already_printed_end_line_index: &mut usize) -> Result {
         // writeln!(f, "[debug] potentially printing post surrounding lines, last line: {}, already printed to: {}", last_line, *already_printed_to)?;
 
-        if last_line >= *already_printed_end_line_index {
+        if last_line + 1 >= *already_printed_end_line_index {
             let first_print_line = (last_line + 1).max(*already_printed_end_line_index);
             let last_print_line = self.get_last_print_line(file, last_line)?.min(main_line - 1);
 
@@ -322,7 +322,7 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
 
         // writeln!(f, "[debug] current line ({}); first = {}, last = {}", main_line, first_print_line, last_print_line)?;
 
-        if first_print_line_index > *already_printed_end_line_index {
+        if *already_printed_end_line_index != 0 && first_print_line_index > *already_printed_end_line_index {
             self.write_line_number(None, "...")?;
             writeln!(self.f)?;
         }

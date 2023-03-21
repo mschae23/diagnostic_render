@@ -187,7 +187,7 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
         self.colors.reset(self.f)?;
 
         // Sort by start byte index
-        annotations.sort_unstable_by(|a, b| a.range.start.cmp(&b.range.start));
+        annotations.sort_by(|a, b| a.range.start.cmp(&b.range.start));
 
         {
             let mut max_nested_blocks = 0;
@@ -219,32 +219,28 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
         let mut continuing_annotations_indices = Vec::new();
         let mut current_line_index = 0;
         let mut last_line_index = None;
-        let mut min_index = 0;
         let mut first_iteration = true;
 
         let last_line_index_in_file = self.files.line_index(file, self.files.source(file)?.len() - 1)?;
 
         loop {
-            current_line_index = match annotations.get(min_index) {
-                None => break,
-                Some(annotation) => if first_iteration { current_line_index } else {current_line_index + 1}
-                    .max(self.files.line_index(file, annotation.range.start)?),
+            current_line_index = if first_iteration {
+                current_line_index
+            } else {
+                current_line_index + 1
             };
-
-            // eprintln!("[debug] Current line index: {}", current_line_index);
 
             if current_line_index > last_line_index_in_file {
                 break;
             }
 
-            for (i, annotation) in annotations.iter().enumerate().skip(min_index) {
+            for (i, annotation) in annotations.iter().enumerate() {
                 let start_line_index = self.files.line_index(file, annotation.range.start)?;
                 let end_line_index = self.files.line_index(file, annotation.range.end)?;
 
                 if start_line_index > current_line_index && end_line_index > current_line_index {
                     break;
                 } else if end_line_index < current_line_index && start_line_index < current_line_index {
-                    min_index = i + 1;
                     continue;
                 }
 
@@ -324,7 +320,7 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
         // writeln!(f, "[debug] current line ({}); first = {}, last = {}", main_line, first_print_line, last_print_line)?;
 
         if *already_printed_end_line_index != 0 && first_print_line_index > *already_printed_end_line_index {
-            self.write_line_begin(diagnostic, None, "...", &continuing_annotations)?;
+            self.write_source_line(diagnostic, None, "...", &continuing_annotations)?;
             writeln!(self.f)?;
         }
 
@@ -340,25 +336,7 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
                                  line_index: usize, main_line_index: usize,
                                  annotations: &[&Annotation<FileId>],
                                  continuing_annotations: &[&Annotation<FileId>]) -> Result {
-        self.write_line_begin(diagnostic, Some(self.files.line_number(file, line_index)?), " |", continuing_annotations)?;
-
-        let source = &self.files.source(file)?[self.files.line_range(file, line_index)?];
-
-        if !source.trim().is_empty() {
-            write!(self.f, " ")?;
-
-            self.colors.source(self.f)?;
-
-            if source.ends_with('\n') {
-                write!(self.f, "{}", source)?;
-            } else {
-                writeln!(self.f, "{}", source)?;
-            }
-
-            self.colors.reset(self.f)?;
-        } else {
-            writeln!(self.f)?;
-        }
+        self.write_source_line(diagnostic, Some((file, line_index)), " |", continuing_annotations)?;
 
         if line_index != main_line_index {
             return Ok(());
@@ -373,6 +351,8 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
         let data = calculate::calculate(diagnostic, &self.files, file, line_index, annotations, continuing_annotations)?;
         let mut data_stack = Vec::new();
         let mut stack_removal_indices = Vec::new();
+
+        // eprintln!("[debug] Data:\n{:#?}", &data);
 
         for line_data in data.into_iter() {
             self.write_line_number(None, " |")?;
@@ -598,8 +578,14 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
         Ok(())
     }
 
-    fn write_line_begin(&mut self, diagnostic: &Diagnostic<FileId>, line: Option<usize>, separator: &str, continuing_annotations: &[&Annotation<FileId>]) -> Result {
-        self.write_line_number(line, separator)?;
+    fn write_source_line(&mut self, diagnostic: &Diagnostic<FileId>, line: Option<(FileId, usize)>, separator: &str, continuing_annotations: &[&Annotation<FileId>]) -> Result {
+        let line_number = if let Some((file, line_index)) = line.as_ref() {
+            Some(self.files.line_number(*file, *line_index)?)
+        } else {
+            None
+        };
+
+        self.write_line_number(line_number, separator)?;
 
         // eprintln!("[debug] writing line begin; line: {:?}, separator: {}, continuing: {}, max nested blocks: {}", line.as_ref(), separator.len(), continuing_annotations.len(), self.max_nested_blocks);
 
@@ -617,7 +603,27 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
             }
         }
 
-        write!(self.f, "{:>nested_blocks$}", "", nested_blocks = (2 * (self.max_nested_blocks - continuing_annotations.len())).saturating_sub(1))?;
+        if let Some((file, line_index)) = line {
+            let source = &self.files.source(file)?[self.files.line_range(file, line_index)?];
+            let is_empty = source.trim().is_empty();
+
+            if !is_empty {
+                write!(self.f, "{:>nested_blocks$}", "", nested_blocks = (2 * self.max_nested_blocks - (2 * continuing_annotations.len()).saturating_sub(1)).max(1))?;
+
+                self.colors.source(self.f)?;
+
+                if source.ends_with('\n') {
+                    write!(self.f, "{}", source)?;
+                } else {
+                    writeln!(self.f, "{}", source)?;
+                }
+
+                self.colors.reset(self.f)?;
+            } else {
+                writeln!(self.f)?;
+            }
+        }
+
         Ok(())
     }
 

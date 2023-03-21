@@ -55,10 +55,9 @@ fn test_fibonacci() {
 
     {
         let mut opened = Vec::new();
+        let mut i = 0;
 
-        for (i, b) in source.bytes().enumerate() {
-            let c = char::from(b);
-
+        for c in source.chars() {
             match c {
                 '(' => opened.push((i, ')')),
                 '[' => opened.push((i, ']')),
@@ -69,7 +68,7 @@ fn test_fibonacci() {
                 ')' | ']' | '}' | '"' => {
                     if let Some((start, expected)) = opened.pop() {
                         if c == expected {
-                            let range = start..i;
+                            let range = start..i + 1;
                             let label = match c {
                                 ')' => "this is a pair of parenthesis",
                                 ']' => "this is a pair of brackets",
@@ -82,10 +81,12 @@ fn test_fibonacci() {
                     }
                 },
                 _ => {},
-            }
+            };
+
+            i += c.len_utf8();
         }
 
-        diagnostic = diagnostic.with_annotation(Annotation::new(AnnotationStyle::Primary, (), 0..source.len())
+        diagnostic = diagnostic.with_annotation(Annotation::new(AnnotationStyle::Primary, (), 0..source.len() - 1)
             .with_label("this is the whole program"));
     }
 

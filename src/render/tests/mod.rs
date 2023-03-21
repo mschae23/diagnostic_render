@@ -24,30 +24,28 @@ fn test_header_1() {
     "###);
 }
 
-/* // TODO this completely breaks the renderer right now
+// TODO this completely breaks the renderer right now
 #[test]
 fn test_fibonacci() {
-    let source = r#"
-    pub fn fibonacci(n: i32) -> u64 {
-        if n < 0 {
-            panic!("{} is negative!", n);
-        } else if n == 0 {
-            panic!("zero is not a right argument to fibonacci()!");
-        } else if n == 1 {
-            return 1;
-        }
-
-        let mut sum = 0;
-        let mut last = 0;
-        let mut curr = 1;
-        for _i in 1..n {
-            sum = last + curr;
-            last = curr;
-            curr = sum;
-        }
-        sum
+    let source = r#"pub fn fibonacci(n: i32) -> u64 {
+    if n < 0 {
+        panic!("{} is negative!", n);
+    } else if n == 0 {
+        panic!("zero is not a right argument to fibonacci()!");
+    } else if n == 1 {
+        return 1;
     }
-    "#;
+
+    let mut sum = 0;
+    let mut last = 0;
+    let mut curr = 1;
+    for _i in 1..n {
+        sum = last + curr;
+        last = curr;
+        curr = sum;
+    }
+    sum
+}"#;
 
     let mut buf = Buffer::no_color();
     let file = SimpleFile::new("test_file.test", source);
@@ -62,9 +60,11 @@ fn test_fibonacci() {
             let c = char::from(b);
 
             match c {
-                '(' | '[' | '{' => opened.push((i, c)),
+                '(' => opened.push((i, ')')),
+                '[' => opened.push((i, ']')),
+                '{' => opened.push((i, '}')),
                 '"' if opened.is_empty() || opened.last().unwrap().1 != '"' => {
-                    opened.push((i, c));
+                    opened.push((i, '"'));
                 },
                 ')' | ']' | '}' | '"' => {
                     if let Some((start, expected)) = opened.pop() {
@@ -98,7 +98,7 @@ fn test_fibonacci() {
 
     insta::assert_snapshot!(result);
 }
-*/
+
 
 mod singleline;
 mod ending;

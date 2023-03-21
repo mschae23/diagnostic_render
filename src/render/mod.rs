@@ -248,15 +248,16 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
                     continue;
                 }
 
+                if continuing_annotations_indices.contains(&i) || annotations_on_line_indices.contains(&i) {
+                    eprintln!("Bug in error message formatter: adding an index twice ({})!", i);
+                }
+
+                if start_line_index < current_line_index {
+                    continuing_annotations_indices.push(i);
+                }
+
                 if start_line_index == current_line_index || end_line_index == current_line_index {
                     annotations_on_line_indices.push(i);
-
-                    if start_line_index < current_line_index {
-                        // If it started before this line, it should be in both vectors
-                        continuing_annotations_indices.push(i);
-                    }
-                } else if start_line_index < current_line_index && end_line_index >= current_line_index {
-                    continuing_annotations_indices.push(i);
                 }
             }
 
@@ -266,11 +267,11 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
                     continuing_annotations_indices.iter().map(|i| &annotations[*i]).collect::<Vec<_>>(),
                     &mut already_printed_end_index)?;
                 annotations_on_line_indices.clear();
-                continuing_annotations_indices.clear();
 
                 last_line_index = Some(current_line_index);
             }
 
+            continuing_annotations_indices.clear();
             first_iteration = false;
         }
 
@@ -323,7 +324,7 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
         // writeln!(f, "[debug] current line ({}); first = {}, last = {}", main_line, first_print_line, last_print_line)?;
 
         if *already_printed_end_line_index != 0 && first_print_line_index > *already_printed_end_line_index {
-            self.write_line_number(None, "...")?;
+            self.write_line_begin(diagnostic, None, "...", &continuing_annotations)?;
             writeln!(self.f)?;
         }
 

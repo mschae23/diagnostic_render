@@ -103,10 +103,10 @@ impl ColorConfig for DefaultColorConfig {
     fn severity(&self, f: &mut impl WriteColor, severity: Severity) -> Result {
         f.set_color(ColorSpec::new().set_fg(Some(match severity {
             Severity::Help => Color::Green,
-            Severity::Note => Color::Cyan,
+            Severity::Note => Color::Blue,
             Severity::Warning => Color::Yellow,
             Severity::Error | Severity::Bug => Color::Red,
-        })).set_intense(matches!(severity, Severity::Note | Severity::Error | Severity::Bug)))
+        })).set_intense(matches!(severity, Severity::Note)).set_bold(matches!(severity, Severity::Note | Severity::Error | Severity::Bug)))
     }
 
     fn name(&self, f: &mut impl WriteColor, severity: Severity) -> Result {
@@ -122,17 +122,17 @@ impl ColorConfig for DefaultColorConfig {
     }
 
     fn line_number(&self, f: &mut impl WriteColor) -> Result {
-        f.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_intense(true).set_bold(true))
+        f.set_color(ColorSpec::new().set_fg(Some(Color::Blue)).set_intense(true).set_bold(true))
     }
 
     fn line_number_separator(&self, f: &mut impl WriteColor) -> Result {
-        f.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_intense(true))
+        f.set_color(ColorSpec::new().set_fg(Some(Color::Blue)).set_intense(true).set_bold(true))
     }
 
     fn annotation(&self, f: &mut impl WriteColor, style: AnnotationStyle, severity: Severity) -> Result {
         match style {
             AnnotationStyle::Primary => self.severity(f, severity),
-            AnnotationStyle::Secondary => f.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_intense(true)),
+            AnnotationStyle::Secondary => f.set_color(ColorSpec::new().set_fg(Some(Color::Blue)).set_intense(true).set_bold(true)),
         }
     }
 

@@ -1,6 +1,6 @@
 [package]
 name = "diagnostic_render"
-version = "1.0.4"
+version = "1.0.5"
 edition = "2021"
 description = "a library for printing formatted diagnostics like error messages and warnings, intended for use in compilers"
 readme = "README.md"

@@ -1,5 +1,5 @@
 use termcolor::Buffer;
-use crate::diagnostic::Severity;
+use crate::diagnostic::{Note, Severity};
 use crate::file::SimpleFile;
 use crate::render::color::DefaultColorConfig;
 use super::*;
@@ -21,6 +21,29 @@ fn test_header_1() {
 
     insta::assert_snapshot!(result, @r###"
     error[test/diagnostic_1]: Test message
+    "###);
+}
+
+#[test]
+fn test_footer_1() {
+    let mut buf = Buffer::no_color();
+    let mut renderer = DiagnosticRenderer::new(&mut buf, DefaultColorConfig,
+        SimpleFile::new("main.test", "unused source"),
+        RenderConfig { surrounding_lines: 0 });
+    renderer.render(vec![
+        Diagnostic::new(Severity::Error)
+            .with_name("test/diagnostic_2")
+            .with_message("Test message")
+            .with_note(Note::note("This is a test note\nYes."))
+    ]).unwrap();
+
+    let buf = buf.into_inner();
+    let result = String::from_utf8_lossy(&buf);
+
+    insta::assert_snapshot!(result, @r###"
+    error[test/diagnostic_2]: Test message
+     = note: This is a test note
+             Yes.
     "###);
 }
 

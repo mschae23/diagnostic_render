@@ -7,7 +7,8 @@ fn test_1() {
     let diagnostic = Diagnostic::new(Severity::Error)
         .with_message("Test message")
         .with_annotation( Annotation::new(AnnotationStyle::Primary, (), 5..9)
-            .with_label("test label"));
+            .with_label("test label"))
+        .with_note(Note::help("Change something"));
     let mut renderer = DiagnosticRenderer::new(&mut buf, DefaultColorConfig,
         file, RenderConfig { surrounding_lines: 0 });
     renderer.render(vec![diagnostic]).unwrap();
@@ -27,7 +28,8 @@ fn test_separate_lines_1() {
         .with_annotation(Annotation::new(AnnotationStyle::Primary, (), 3..13)
             .with_label("expected type annotation here"))
         .with_annotation(Annotation::new(AnnotationStyle::Secondary, (), 28..31)
-            .with_label("due to this"));
+            .with_label("due to this"))
+        .with_note(Note::help("Really helpful multi-line tip:\n123456789"));
     let mut renderer = DiagnosticRenderer::new(&mut buf, DefaultColorConfig,
         file, RenderConfig { surrounding_lines: 0 });
     renderer.render(vec![diagnostic]).unwrap();

@@ -129,6 +129,8 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
             }
         }
 
+        self.render_diagnostic_footer(&diagnostic)?;
+
         if suppressed_count > 0 {
             writeln!(self.f, "... and {} more", suppressed_count)?;
         }
@@ -161,6 +163,28 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
 
         if diagnostic.message.is_empty() {
             writeln!(self.f)?;
+        }
+
+        Ok(())
+    }
+
+    fn render_diagnostic_footer(&mut self, diagnostic: &Diagnostic<FileId>) -> Result {
+        for note in diagnostic.notes.iter() {
+            let severity_str = note.severity.to_string();
+            let severity_len = severity_str.len();
+
+            self.write_line_number(None, " =")?;
+            write!(self.f, " ")?;
+            self.colors.note_severity(self.f, note.severity)?;
+            write!(self.f, "{}", severity_str)?;
+            self.colors.reset(self.f)?;
+            write!(self.f, ": ")?;
+            self.colors.note_message(self.f, note.severity)?;
+
+            let mut join_str = String::from("\n");
+            join_str.push_str(&" ".repeat(self.line_digits as usize + 5 + severity_len));
+
+            write!(self.f, "{}", note.message.lines().collect::<Vec<_>>().join(&join_str))?;
         }
 
         Ok(())

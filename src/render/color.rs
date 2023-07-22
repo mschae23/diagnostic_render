@@ -140,8 +140,8 @@ impl ColorConfig for DefaultColorConfig {
         self.reset(f)
     }
 
-    fn note_severity(&self, f: &mut impl WriteColor, severity: Severity) -> Result {
-        self.severity(f, severity)
+    fn note_severity(&self, f: &mut impl WriteColor, _severity: Severity) -> Result {
+        f.set_color(ColorSpec::new().set_bold(true))
     }
 
     fn note_message(&self, f: &mut impl WriteColor, _severity: Severity) -> Result {

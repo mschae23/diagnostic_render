@@ -8,4 +8,5 @@ error: Mismatched types
   |    ^^^^^^^^^^ expected type annotation here
 2 | something += 3.0;
   |              --- due to this
-
+  = help: Really helpful multi-line tip:
+          123456789

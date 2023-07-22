@@ -6,3 +6,4 @@ error: Test message
  --> test_file.test:1:6
 1 | test file contents
   |      ^^^^ test label
+  = help: Change something

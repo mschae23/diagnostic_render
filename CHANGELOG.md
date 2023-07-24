@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2023-07-24
+
+### Fixed
+- Fixed integer overflow panic when the contents of a file are empty.
+
 ## [1.1.0] - 2023-07-22
 
 ### Added

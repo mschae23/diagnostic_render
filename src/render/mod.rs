@@ -245,7 +245,7 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
         let mut last_line_index = None;
         let mut first_iteration = true;
 
-        let last_line_index_in_file = self.files.line_index(file, self.files.source(file)?.len() - 1)?;
+        let last_line_index_in_file = self.get_last_line_index(file)?;
 
         loop {
             current_line_index = if first_iteration {
@@ -660,7 +660,7 @@ impl<'w, W: WriteColor, C: ColorConfig, FileId, F: Files<FileId=FileId>> Diagnos
     }
 
     fn get_last_line_index(&self, file: FileId) -> std::result::Result<usize, Error> {
-        self.files.line_index(file, self.files.source(file)?.len() - 1)
+        self.files.line_index(file, self.files.source(file)?.len().saturating_sub(1))
     }
 }
 
